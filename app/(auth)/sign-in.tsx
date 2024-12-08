@@ -1,5 +1,6 @@
 import { View, Text, ScrollView } from "react-native";
-import React, { useEffect } from "react";
+import { Link } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { images } from "@/constants";
 import Animated, {
@@ -9,6 +10,8 @@ import Animated, {
   withSequence,
   withDelay,
 } from "react-native-reanimated";
+import { FormField } from "@/components/FormField";
+import CustomButton from "@/components/CustomButton";
 
 const SignIn = () => {
   const scale = useSharedValue(0.5);
@@ -56,7 +59,30 @@ const SignIn = () => {
               </Text>
             </View>
           </Animated.View>
-          <Text className="font-inbold text-light mt-10 text-3xl">Sign in</Text>
+          <Text className="font-inbold text-light mt-10 mb-4 text-3xl">
+            Sign in
+          </Text>
+          <FormField title="Email" value="" />
+          <FormField title="Password" value="" />
+          <Link
+            href="/reset-pwd"
+            className="text-green-50 font-inmedium mt-5 text-right"
+          >
+            Forgot password?
+          </Link>
+          <View className="mt-5">
+            <CustomButton
+              title="Log In"
+              handlePress={() => console.log("Log In!")}
+              textStyles="text-white font-inbold"
+            />
+          </View>
+          <Text className="text-green-50 mt-5 text-center font-inmedium">
+            Don't have an account?{" "}
+            <Link href="/sign-up" className="text-secondary font-inbold">
+              Sign up
+            </Link>
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
