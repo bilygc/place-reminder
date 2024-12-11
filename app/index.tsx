@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { router } from 'expo-router';
-import { View, Text } from 'react-native';
-import { images } from '@/constants';
+import React, { useEffect } from "react";
+import { router } from "expo-router";
+import { View, Text } from "react-native";
+import { images } from "@/constants";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,11 +9,10 @@ import Animated, {
   withSequence,
   withDelay,
   Easing,
-} from 'react-native-reanimated';
-import CustomButton from '@/components/CustomButton';
+} from "react-native-reanimated";
+import CustomButton from "@/components/CustomButton";
 
 export default function SplashScreen() {
-
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
@@ -42,21 +41,34 @@ export default function SplashScreen() {
   });
 
   return (
-    <View className="flex-1 justify-center items-center bg-background">
-      <Animated.View className="flex flex-row gap-1 flex-wrap max-w-[250px]" style={containerStyle}>
+    <View className="flex-1 justify-center items-center bg-background text-center">
+      <Animated.View
+        className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
+        style={containerStyle}
+      >
         <Animated.View style={iconStyle}>
           <AppLogo width={80} height={97} />
         </Animated.View>
-        <View >
-          <Text className="font-inbold text-light mt-4 text-[32px]">PLACE REMINDER</Text>
+        <View>
+          <Text className="font-inbold text-light mt-4 text-[32px]">
+            PLACE REMINDER
+          </Text>
         </View>
-        <View >
-        <Animated.Text className="text-[18px] text-primary mt-4" style={{ opacity }}>
-          Remember where, not when
-        </Animated.Text>
+        <View className="mx-auto">
+          <Animated.Text
+            className="text-[18px] text-primary mt-4"
+            style={{ opacity }}
+          >
+            Remember where, not when
+          </Animated.Text>
         </View>
       </Animated.View>
-      <CustomButton title='Continue with email' handlePress={()=> router.push('/sign-in')} containerStyles="mt-5" textStyles="text-light text-lg font-insemiBold" />
+      <CustomButton
+        title="Continue with email"
+        handlePress={() => router.push("/sign-in")}
+        containerStyles="mt-5"
+        textStyles="text-light text-lg font-insemiBold"
+      />
     </View>
   );
 }
