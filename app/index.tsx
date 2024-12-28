@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { configure } from "mobx";
 import { router } from "expo-router";
 import { View, Text } from "react-native";
 import { images } from "@/constants";
@@ -11,13 +12,15 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import CustomButton from "@/components/CustomButton";
+import { observer } from "mobx-react-lite";
 
-export default function SplashScreen() {
+configure({ enforceActions: "observed" }); // Ensure actions are used for modifications
+
+const SplashScreen = observer(() => {
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
-
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
     opacity.value = withTiming(1, { duration: 500 });
@@ -26,20 +29,17 @@ export default function SplashScreen() {
       withDelay(1000, withTiming(360, { duration: 2000 }))
     );
   }, []);
-
   const containerStyle = useAnimatedStyle(() => {
     return {
       opacity: opacity.value,
       transform: [{ scale: scale.value }],
     };
   });
-
   const iconStyle = useAnimatedStyle(() => {
     return {
       transform: [{ rotate: `${rotate.value}deg` }],
     };
   });
-
   return (
     <View className="flex-1 justify-center items-center bg-background text-center">
       <Animated.View
@@ -71,4 +71,6 @@ export default function SplashScreen() {
       />
     </View>
   );
-}
+});
+
+export default SplashScreen;

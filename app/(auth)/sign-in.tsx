@@ -1,6 +1,6 @@
 import { View, Text, ScrollView } from "react-native";
 import { Link } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { images } from "@/constants";
 import Animated, {
