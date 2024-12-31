@@ -1,11 +1,9 @@
 import { useFonts } from "expo-font";
 import { Stack, SplashScreen } from "expo-router";
 import React, { useEffect } from "react";
-import { Text } from "react-native";
-
+import { Auth } from "@/components/Auth";
 // Import your global CSS file
 import "../global.css";
-import { View } from "react-native-reanimated/lib/typescript/Animated";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,14 +42,14 @@ const RootLayout = () => {
   }
 
   return (
-    // <GlobalProvider>
-    <Stack>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      {/* <Stack.Screen name="(tabs)" options={{ headerShown: false }} /> */}
-      {/* <Stack.Screen name="/search/[query]" options={{ headerShown: false }} /> */}
-    </Stack>
-    // </GlobalProvider>
+    <Auth>
+      <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        {/* <Stack.Screen name="(tabs)" options={{ headerShown: false }} /> */}
+        {/* <Stack.Screen name="/search/[query]" options={{ headerShown: false }} /> */}
+      </Stack>
+    </Auth>
   );
 };
 
