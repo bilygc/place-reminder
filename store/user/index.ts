@@ -1,2 +1,2 @@
-export { userStore } from "./UserStore";
-export type { User } from "./user.types";
+export { User, UserContext } from "./user";
+export type { UserType } from "./user.types";

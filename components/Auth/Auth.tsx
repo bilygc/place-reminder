@@ -1,32 +1,33 @@
-import React, { useState, useEffect } from "react";
+import React, { useContext, useEffect, createContext } from "react";
 import { getCurrentUser } from "@/lib/appwrite";
-import { Models } from "react-native-appwrite";
+import { observer } from "mobx-react-lite";
+import type { UserType } from "@/store/user";
+import { User, UserContext } from "@/store/user";
 
-const Auth = ({ children }: React.PropsWithChildren<{}>) => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<Models.Document | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+const Auth = observer(({ children }: React.PropsWithChildren<{}>) => {
+  const user = new User();
 
   useEffect(() => {
     getCurrentUser()
-      .then((user) => {
-        if (user) {
-          setIsLoggedIn(true);
-          setUser(user);
-        } else {
-          setIsLoggedIn(false);
-          setUser(null);
+      .then((userData) => {
+        if (userData) {
+          user.login({
+            session: {
+              $id: userData.$id,
+              isLoggedIn: true,
+            },
+            email: userData.email,
+            userName: userData.email,
+            avatar: userData.avatar,
+          });
         }
       })
       .catch((error) => {
         console.error(error);
-      })
-      .finally(() => {
-        setIsLoading(false);
       });
   }, []);
 
-  return children;
-};
+  return <UserContext.Provider value={user}>{children}</UserContext.Provider>;
+});
 
 export default Auth;

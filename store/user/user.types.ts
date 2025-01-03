@@ -1,5 +1,21 @@
-import { User as userStore } from "./user";
+export interface UserType {
+  session: {
+    $id?: string;
+    isLoggedIn: boolean;
+  };
+  email: string;
+  userName: string;
+  avatar: string;
+}
 
-export interface User {
-  user: userStore;
+export interface UserSession {
+  $id: string;
+  isLoggedIn: boolean;
+}
+
+export interface UserData {
+  session: UserSession;
+  email: string;
+  userName: string;
+  avatar: string;
 }

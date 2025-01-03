@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useContext } from "react";
 import { configure } from "mobx";
 import { router } from "expo-router";
 import { View, Text } from "react-native";
@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import CustomButton from "@/components/CustomButton";
 import { observer } from "mobx-react-lite";
+import { UserContext } from "@/store/user";
 
 configure({ enforceActions: "observed" }); // Ensure actions are used for modifications
 
@@ -21,6 +22,8 @@ const SplashScreen = observer(() => {
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
+  const user = useContext(UserContext);
+
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
     opacity.value = withTiming(1, { duration: 500 });
