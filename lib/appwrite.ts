@@ -109,8 +109,6 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
   try {
     const currentAccount = await account.get();
 
-    console.log({ currentAccount });
-
     if (!currentAccount) {
       throw Error;
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useContext } from "react";
 import { configure } from "mobx";
-import { router } from "expo-router";
+import { router, Redirect } from "expo-router";
 import { View, Text } from "react-native";
 import { images } from "@/constants";
 import Animated, {
@@ -18,11 +18,14 @@ import { UserContext } from "@/store/user";
 configure({ enforceActions: "observed" }); // Ensure actions are used for modifications
 
 const SplashScreen = observer(() => {
+  const user = useContext(UserContext);
+  if (user.isLoggedIn) {
+    return <Redirect href="/home" />;
+  }
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
-  const user = useContext(UserContext);
 
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
