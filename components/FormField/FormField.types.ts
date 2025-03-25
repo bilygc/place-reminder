@@ -2,6 +2,6 @@ export interface FormFieldProps {
   title: string;
   value: string;
   placeholder?: string;
-  handleChangeText?: () => void;
+  handleChangeText?: (text: string) => void;
   otherStyles?: string;
 }
