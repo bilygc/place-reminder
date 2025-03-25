@@ -1,8 +1,10 @@
+import { observer } from "mobx-react-lite";
 import { View, Text, ScrollView } from "react-native";
-import { Link } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { Link, router } from "expo-router";
+import React, { useEffect, useState, useContext } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { images } from "@/constants";
+import ensureError from "@/utils/ensureError";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,8 +14,83 @@ import Animated, {
 } from "react-native-reanimated";
 import { FormField } from "@/components/FormField";
 import CustomButton from "@/components/CustomButton";
+import { createUser } from "@/lib/appwrite";
+import { UserContext } from "@/store/user";
 
-const SignIn = () => {
+interface FormProps {
+  username: string;
+  email: string;
+  password: string;
+  pwdConfirm: string;
+}
+
+const SignUp = observer(() => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [form, setForm] = useState<FormProps>({
+    username: "",
+    email: "",
+    password: "",
+    pwdConfirm: "",
+  });
+
+  const user = useContext(UserContext);
+
+  const submit = async () => {
+    if (!form.email || !form.password || !form.username) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(form.email)) {
+      alert("Please enter a valid email address");
+      return;
+    }
+
+    const passwordRegex = /^(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,}$/;
+
+    if (!passwordRegex.test(form.password)) {
+      alert(
+        "Password must be at least 6 characters long and contain at least one capital letter and one number"
+      );
+      return;
+    }
+
+    if (form.password !== form.pwdConfirm) {
+      alert("Passwords do not match");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const userDocument = await createUser(
+        form.email,
+        form.password,
+        form.username
+      );
+      console.log({ userDocument });
+      user.login({
+        session: {
+          $id: userDocument.$id,
+          isLoggedIn: true,
+        },
+        email: form.email,
+        userName: form.username,
+        avatar: userDocument.avatar,
+      });
+      router.replace("/home");
+    } catch (error: unknown) {
+      const err = ensureError(error);
+      console.error(err.message);
+      throw new Error(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFormChange = (name: string, value: string) => {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
@@ -45,7 +122,7 @@ const SignIn = () => {
   return (
     <SafeAreaView className="bg-background h-full">
       <ScrollView>
-        <View className="mt-20 ml-7 max-w-sm">
+        <View className="mt-16 ml-7 max-w-sm">
           <Animated.View
             className="flex flex-row gap-1 flex-wrap max-w-[220px]"
             style={containerStyle}
@@ -59,12 +136,39 @@ const SignIn = () => {
               </Text>
             </View>
           </Animated.View>
-          <Text className="font-inbold text-light mt-10 mb-4 text-3xl">
+          <Text className="font-inbold text-light mt-8 mb-4 text-3xl">
             Sign in
           </Text>
-          <FormField title="Username" value="" />
-          <FormField title="Email" value="" />
-          <FormField title="Password" value="" />
+          <FormField
+            otherStyles="mt-5"
+            title="Username"
+            value={form.username}
+            handleChangeText={(text: string) =>
+              handleFormChange("username", text)
+            }
+          />
+          <FormField
+            otherStyles="mt-4"
+            title="Email"
+            value={form.email}
+            handleChangeText={(text: string) => handleFormChange("email", text)}
+          />
+          <FormField
+            otherStyles="mt-4"
+            title="Password"
+            value={form.password}
+            handleChangeText={(text: string) =>
+              handleFormChange("password", text)
+            }
+          />
+          <FormField
+            otherStyles="mt-4"
+            title="Confirm password"
+            value={form.pwdConfirm}
+            handleChangeText={(text: string) =>
+              handleFormChange("pwdConfirm", text)
+            }
+          />
           <Link
             href="/reset-pwd"
             className="text-green-50 font-inmedium mt-5 text-right"
@@ -74,8 +178,9 @@ const SignIn = () => {
           <View className="mt-5">
             <CustomButton
               title="Sign Up"
-              handlePress={() => console.log("Log In!")}
+              handlePress={submit}
               textStyles="text-white font-inbold"
+              isLoading={isLoading}
             />
           </View>
           <Text className="text-green-50 mt-5 text-center font-inmedium">
@@ -88,6 +193,6 @@ const SignIn = () => {
       </ScrollView>
     </SafeAreaView>
   );
-};
+});
 
-export default SignIn;
+export default SignUp;
