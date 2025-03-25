@@ -1,4 +1,3 @@
-// import { ENDPOINT } from "@env";
 import {
   Client,
   Account,
@@ -60,31 +59,38 @@ export const createUser: CreateUserFunction = async (
   username
 ) => {
   try {
+    console.log("1");
     const newAccount = await account.create(
       ID.unique(),
       email,
       password,
       username
     );
+    console.log("2");
     if (!newAccount) {
       throw Error;
     }
+    console.log("3");
 
     const avatarUrl = avatars.getInitials(username);
+    console.log("4");
 
     await signIn(email, password);
+    console.log("5");
+    console.log({ newAccount: newAccount.$id });
 
     const newUser = await database.createDocument(
       config.databaseId,
       config.userCollectionId,
       ID.unique(),
       {
-        accountId: newAccount.$id,
+        accountid: newAccount.$id,
         email,
         username,
         avatar: avatarUrl,
       }
     );
+    console.log("6");
 
     return newUser;
   } catch (error: unknown) {
@@ -116,7 +122,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     const currentUser = await database.listDocuments(
       config.databaseId,
       config.userCollectionId,
-      [Query.equal("accountId", currentAccount.$id)]
+      [Query.equal("accountid", currentAccount.$id)]
     );
 
     if (!currentUser) {
