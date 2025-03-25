@@ -19,9 +19,7 @@ configure({ enforceActions: "observed" }); // Ensure actions are used for modifi
 
 const SplashScreen = observer(() => {
   const user = useContext(UserContext);
-  if (user.isLoggedIn) {
-    return <Redirect href="/home" />;
-  }
+  console.log("is logged in", user.isLoggedIn);
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
@@ -46,6 +44,10 @@ const SplashScreen = observer(() => {
       transform: [{ rotate: `${rotate.value}deg` }],
     };
   });
+
+  if (user.isLoggedIn) {
+    return <Redirect href="/home" />;
+  }
   return (
     <View className="flex-1 justify-center items-center bg-background text-center">
       <Animated.View
