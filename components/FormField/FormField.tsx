@@ -8,14 +8,19 @@ const FormField = ({
   value,
   placeholder,
   handleChangeText,
+  inputStyles,
   otherStyles,
   ...props
 }: FormFieldProps) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
     <View className={`space-y-2 space-x-2 mt-6 ${otherStyles}`}>
-      <Text className="text-green-50  font-inmedium mb-2">{title}</Text>
-      <View className="border-2 border-secondary w-full h-14 px-4 bg-white-50 rounded-2xl focus:border-secondary items-center flex-row">
+      {title && (
+        <Text className="text-green-50  font-inmedium mb-2">{title}</Text>
+      )}
+      <View
+        className={`border-2 border-secondary w-full h-14 px-4 bg-white-50 rounded-2xl focus:border-secondary items-center flex-row ${inputStyles}`}
+      >
         <TextInput
           className="flex-1 font-insemiBold"
           placeholder={placeholder}
@@ -25,7 +30,7 @@ const FormField = ({
           onChangeText={handleChangeText}
           {...props}
         />
-        {title.search(/password/i) >= 0 && (
+        {title && title.search(/password/i) >= 0 && (
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Image
               source={showPassword ? icons.eye : icons.eyeHide}
