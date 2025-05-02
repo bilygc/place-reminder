@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { images } from "@/constants";
+import { images, icons } from "@/constants";
 import { router, Redirect } from "expo-router";
+import { FlatList, TouchableOpacity, Image } from "react-native";
 import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
@@ -12,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { FormField } from "@/components/FormField";
 import CustomButton from "@/components/CustomButton";
+import CardReminder from "@/components/CardReminder/CardReminder";
 
 const Home = () => {
   const [reminder, setReminder] = useState("");
@@ -51,38 +53,106 @@ const Home = () => {
 
   return (
     <SafeAreaView>
-      <View>
-        {/* Logo & Form */}
-        <View className="flex w-full h-1/2 bg-background">
-          {/* Logo */}
-          <View className="flex-1 justify-center items-center text-center">
-            <Animated.View
-              className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
-              style={containerStyle}
-            >
-              <Animated.View style={iconStyle}>
-                <AppLogo width={80} height={97} />
-              </Animated.View>
-              <View>
-                <Text className="font-inbold text-light mt-4 text-[32px]">
-                  PLACE REMINDER
+      <FlatList
+        data={[
+          {
+            at: "sadasdsad",
+            do: "ghjwerhmprtyyf",
+            active: false,
+            $id: "iousdjcbcikaiuywe734g",
+          },
+          {
+            at: "sahfghfgad",
+            do: "azxczxczxcd",
+            active: true,
+            $id: "ioucbcikaiuywe734g",
+          },
+          {
+            at: "syuiyuiuyiuid",
+            do: "iopiopiopoip",
+            active: false,
+            $id: "ioukaiuywe734g",
+          },
+        ]}
+        keyExtractor={(item) => item.$id}
+        contentContainerStyle={{
+          backgroundColor: "#E1FFF3",
+          height: "auto",
+          paddingBottom: "100%",
+        }}
+        renderItem={({ item }) => (
+          <View className="flex">
+            <CardReminder card={item} />
+          </View>
+        )}
+        ListHeaderComponent={() => (
+          <View>
+            {/* Logo & Form */}
+            <View className="flex w-full bg-background pt-16 pb-6">
+              {/* Logo */}
+              <View className="flex-1 justify-center items-center text-center">
+                <Animated.View
+                  className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
+                  style={containerStyle}
+                >
+                  <Animated.View style={iconStyle}>
+                    <AppLogo width={80} height={97} />
+                  </Animated.View>
+                  <View>
+                    <Text className="font-inbold text-light mt-4 text-[32px]">
+                      PLACE REMINDER
+                    </Text>
+                  </View>
+                </Animated.View>
+              </View>
+              {/* Form */}
+              <View className="flex gap-y-3 w-[333px] m-auto mt-10">
+                <View className="flex-grow ">
+                  <FormField
+                    placeholder="What do you want to be reminded?"
+                    value={reminder}
+                    handleChangeText={handleChangeText}
+                    inputStyles="rounded-full"
+                  />
+                </View>
+                <View className="flex-row gap-x-3">
+                  <View className="flex-grow max-w-[280px]">
+                    <CustomButton
+                      title="Add reminder"
+                      handlePress={handleButton}
+                      textStyles="text-white"
+                    />
+                  </View>
+                  <View className="flex-none w-[47px] h-[47px]">
+                    <TouchableOpacity
+                      onPress={() => console.log("mic pressed")}
+                      activeOpacity={0.7}
+                      className={
+                        "bg-secondary rounded-full justify-center items-center px-8 py-6"
+                      }
+                      disabled={false}
+                    >
+                      <Image source={icons.mic} resizeMode="contain" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View className="flex self-center w-[333px] bg-light">
+              <View className="">
+                <Text className="text-green-700 font-insemiBold text-[32px]">
+                  My Reminders
                 </Text>
               </View>
-            </Animated.View>
+            </View>
           </View>
-          {/* Form */}
-          <View className="w-72 m-auto">
-            <FormField
-              title="reminder"
-              placeholder="What do you want to be reminded?"
-              value={reminder}
-              handleChangeText={handleChangeText}
-            />
-            <CustomButton title="Add reminder" handlePress={handleButton} />
+        )}
+        ListEmptyComponent={() => (
+          <View className="bg-light">
+            <Text className="text-green-700">There's nothing to remind</Text>
           </View>
-        </View>
-        <View className="h-1/2 w-full"></View>
-      </View>
+        )}
+      />
     </SafeAreaView>
   );
 };
