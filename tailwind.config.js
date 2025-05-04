@@ -10,8 +10,10 @@ module.exports = {
         secondary: "#00A560", // Darker green - keeping your original
         accent: "#FFB100", // Warm orange/gold for accent
         background: "#17705A", // Forest green - keeping your original
-        gray: "#3C3C3C", // keeping your original
-
+        gray: {
+          50: "#7C7C7C",
+          200: "#3C3C3C",
+        },
         // Status colors
         success: "#00F593", // Bright mint green
         error: "#EB4646", // keeping your original red
