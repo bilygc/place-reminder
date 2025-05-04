@@ -1,7 +1,6 @@
 import React, { useContext, useEffect, createContext } from "react";
 import { getCurrentUser } from "@/lib/appwrite";
 import { observer } from "mobx-react-lite";
-import type { UserType } from "@/store/user";
 import { User, UserContext } from "@/store/user";
 
 const Auth = observer(({ children }: React.PropsWithChildren<{}>) => {
