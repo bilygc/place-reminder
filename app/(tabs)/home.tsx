@@ -56,20 +56,20 @@ const Home = () => {
       <FlatList
         data={[
           {
-            at: "sadasdsad",
-            do: "ghjwerhmprtyyf",
+            at: "Evergreen Terrace, 742",
+            do: "Ask for beer to Homer",
             active: false,
             $id: "iousdjcbcikaiuywe734g",
           },
           {
-            at: "sahfghfgad",
-            do: "azxczxczxcd",
+            at: "Evergreen Terrace, 742",
+            do: "Ask for beer to Homer",
             active: true,
             $id: "ioucbcikaiuywe734g",
           },
           {
-            at: "syuiyuiuyiuid",
-            do: "iopiopiopoip",
+            at: "Evergreen Terrace, 742",
+            do: "Ask for beer to Homer",
             active: false,
             $id: "ioukaiuywe734g",
           },
@@ -81,7 +81,7 @@ const Home = () => {
           paddingBottom: "100%",
         }}
         renderItem={({ item }) => (
-          <View className="flex">
+          <View className="flex my-4">
             <CardReminder card={item} />
           </View>
         )}
