@@ -9,13 +9,21 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["location", "fetch"]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -31,6 +39,16 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Place Reminder to use your location to trigger reminders when you enter or leave specific places.",
+          "locationAlwaysPermission": "Allow Place Reminder to use your location in the background to trigger reminders when you enter or leave specific places.",
+          "locationWhenInUsePermission": "Allow Place Reminder to use your location to trigger reminders when you enter or leave specific places.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ]
     ],

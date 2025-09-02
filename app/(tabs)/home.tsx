@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { images, icons } from "@/constants";
-import { router, Redirect } from "expo-router";
 import { FlatList, TouchableOpacity, Image } from "react-native";
 import { View, Text, ScrollView } from "react-native";
+import { useLocationReminders } from "@/components/LocationReminderManager/LocationReminderManager";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
@@ -17,6 +17,13 @@ import CardReminder from "@/components/CardReminder/CardReminder";
 
 const Home = () => {
   const [reminder, setReminder] = useState("");
+  // const {
+  //   addLocationReminder,
+  //   removeLocationReminder,
+  //   updateLocationReminder,
+  //   getLocationReminders,
+  //   currentLocation,
+  // } = useLocationReminders();
 
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);

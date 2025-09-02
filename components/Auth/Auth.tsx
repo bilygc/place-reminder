@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, createContext } from "react";
+import React, { useEffect } from "react";
 import { getCurrentUser } from "@/lib/appwrite";
 import { observer } from "mobx-react-lite";
 import { User, UserContext } from "@/store/user";

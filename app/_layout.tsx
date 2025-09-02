@@ -2,6 +2,7 @@ import { useFonts } from "expo-font";
 import { Stack, SplashScreen } from "expo-router";
 import React, { useEffect } from "react";
 import { Auth } from "@/components/Auth";
+import LocationReminderManager from "@/components/LocationReminderManager/LocationReminderManager";
 // Import your global CSS file
 import "../global.css";
 
@@ -43,12 +44,23 @@ const RootLayout = () => {
 
   return (
     <Auth>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        {/* <Stack.Screen name="/search/[query]" options={{ headerShown: false }} /> */}
-      </Stack>
+      <LocationReminderManager
+        onPermissionDenied={(type) => {
+          console.log(`${type} permission denied`);
+        }}
+        onGeofenceEvent={(eventType, reminder) => {
+          console.log(
+            `Geofence event: ${eventType} for reminder: ${reminder.do}`
+          );
+        }}
+      >
+        <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* <Stack.Screen name="/search/[query]" options={{ headerShown: false }} /> */}
+        </Stack>
+      </LocationReminderManager>
     </Auth>
   );
 };
