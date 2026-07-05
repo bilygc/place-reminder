@@ -1,8 +1,9 @@
 ---
 description: TDD feature implementation, bug fixing, and refactoring specialist
-mode: implementation
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.1
+steps: 2
 tools:
   # Context gathering (Read-only)
   read: true

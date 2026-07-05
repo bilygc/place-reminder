@@ -1,8 +1,9 @@
 ---
 description: UI/UX design and frontend development specialist
-mode: frontend
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.2
+steps: 2
 tools:
   # Context gathering (Read-only)
   read: true

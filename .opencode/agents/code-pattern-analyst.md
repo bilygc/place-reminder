@@ -1,8 +1,9 @@
 ---
 description: Cross-codebase pattern matching and similar implementation finder
-mode: analysis
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.1
+steps: 2
 tools:
   # Context gathering (Read-only)
   read: true

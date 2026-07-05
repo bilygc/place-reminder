@@ -1,7 +1,8 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
-mode: specialized
+mode: subagent
 model: github-copilot/claude-haiku-4.5
+steps: 3
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

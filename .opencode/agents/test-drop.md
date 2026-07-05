@@ -1,8 +1,9 @@
 ---
 description: Redundant and low-value test identifier for test suite pruning
-mode: specialized
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.1
+steps: 2
 tools:
   # Context gathering (Read-only)
   read: true

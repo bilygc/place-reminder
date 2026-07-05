@@ -1,8 +1,9 @@
 ---
 description: Tailwind CSS theme generation and design token configuration specialist
-mode: specialized
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.2
+steps: 2
 tools:
   # Context gathering (Read-only)
   read: true

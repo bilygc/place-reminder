@@ -1,6 +1,6 @@
 ---
 description: Technical guidance, architecture strategy, and engineering best practices advisor
-mode: advisory
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.3
 tools:

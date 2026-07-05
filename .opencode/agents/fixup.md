@@ -1,6 +1,6 @@
 ---
 description: Git fixup command generator for clean history via autosquash
-mode: git
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.0
 tools:

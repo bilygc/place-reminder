@@ -1,8 +1,9 @@
 ---
 description: Multi-repo research and external documentation specialist
-mode: research
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.2
+steps: 3
 tools:
   # External research
   webfetch: true

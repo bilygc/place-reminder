@@ -1,6 +1,6 @@
 ---
 description: Fast codebase search and file pattern discovery specialist
-mode: search
+mode: subagent
 model: github-copilot/claude-haiku-4.5
 temperature: 0.0
 tools:
