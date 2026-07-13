@@ -1,7 +1,7 @@
 ---
 description: Intelligent router that analyzes user requests and delegates to specialized subagents
 mode: primary
-model: github-copilot/claude-haiku-4.5
+model: opencode/deepseek-v4-flash-free
 temperature: 0.1
 tools:
   # Context gathering (Read-only)
@@ -36,6 +36,8 @@ permission:
   bash:
     "*": deny
   webfetch: deny
+  context7: deny
+  github: deny
 ---
 
 # The Orchestrator: Intelligent Request Router

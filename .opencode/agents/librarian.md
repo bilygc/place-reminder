@@ -1,13 +1,14 @@
 ---
 description: Multi-repo research and external documentation specialist
 mode: subagent
-model: github-copilot/claude-haiku-4.5
-temperature: 0.2
-steps: 3
+model: opencode/mimo-v2.5-free
+temperature: 0.1
+steps: 8
 tools:
   # External research
   webfetch: true
   gitingest_tool: true
+  websearch: false
   # Context gathering (Read-only)
   read: true
   list: true
@@ -32,11 +33,14 @@ tools:
   initialize_lsp: false
   mutation_test: false
   test_drop_analysis: false
+  context7*: true
 permission:
   edit: deny
   bash:
     "*": deny
+  websearch: deny
   webfetch: allow
+  context7*: allow  
 ---
 
 # Librarian: Multi-Repo Research & External Documentation Specialist

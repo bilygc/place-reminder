@@ -1,7 +1,7 @@
 ---
 description: Fast codebase search and file pattern discovery specialist
 mode: subagent
-model: github-copilot/claude-haiku-4.5
+model: opencode/mimo-v2.5-free
 temperature: 0.0
 tools:
   # Context gathering (Read-only)

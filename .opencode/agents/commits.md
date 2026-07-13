@@ -1,9 +1,9 @@
 ---
 description: Git commit message generator following conventional commit standards
 mode: subagent
-model: github-copilot/claude-haiku-4.5
+model: opencode/mimo-v2.5-free
 temperature: 0.2
-steps: 1
+steps: 5
 tools:
   # Context gathering (Read-only)
   read: true

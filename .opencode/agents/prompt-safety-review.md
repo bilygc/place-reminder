@@ -1,8 +1,8 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
-model: github-copilot/claude-haiku-4.5
-steps: 3
+model: opencode/mimo-v2.5-free
+steps: 5
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

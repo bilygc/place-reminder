@@ -1,9 +1,9 @@
 ---
 description: Cross-codebase pattern matching and similar implementation finder
 mode: subagent
-model: github-copilot/claude-haiku-4.5
+model: opencode/mimo-v2.5-free
 temperature: 0.1
-steps: 2
+steps: 5
 tools:
   # Context gathering (Read-only)
   read: true

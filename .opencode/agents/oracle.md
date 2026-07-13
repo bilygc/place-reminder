@@ -1,7 +1,8 @@
 ---
 description: Technical guidance, architecture strategy, and engineering best practices advisor
 mode: subagent
-model: github-copilot/claude-haiku-4.5
+model: opencode/mimo-v2.5-free
+steps: 10
 temperature: 0.3
 tools:
   # Context gathering (Read-only)
