@@ -1,8 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "autoupdate": true,
-  "permission": {
-    "context7*": "deny",
-    "github": "deny"
-  }  
+  "autoupdate": true    
 }
