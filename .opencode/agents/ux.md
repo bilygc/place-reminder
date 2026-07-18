@@ -3,7 +3,7 @@ description: UI/UX design and frontend development specialist
 mode: subagent
 model: opencode/mimo-v2.5-free
 temperature: 0.2
-steps: 5
+steps: 12
 tools:
   # Context gathering (Read-only)
   read: true

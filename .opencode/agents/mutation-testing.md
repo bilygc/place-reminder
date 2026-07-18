@@ -3,7 +3,7 @@ description: Test quality validation via mutation testing analysis
 mode: subagent
 model: opencode/mimo-v2.5-free
 temperature: 0.1
-steps: 8
+steps: 10
 tools:
   # Context gathering (Read-only)
   read: true

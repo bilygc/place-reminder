@@ -3,7 +3,7 @@ description: Redundant and low-value test identifier for test suite pruning
 mode: subagent
 model: opencode/mimo-v2.5-free
 temperature: 0.1
-steps: 5
+steps: 10
 tools:
   # Context gathering (Read-only)
   read: true

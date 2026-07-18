@@ -3,7 +3,7 @@ description: Multi-repo research and external documentation specialist
 mode: subagent
 model: opencode/mimo-v2.5-free
 temperature: 0.1
-steps: 8
+steps: 10
 tools:
   # External research
   webfetch: true

@@ -2,7 +2,7 @@
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
 model: opencode/mimo-v2.5-free
-steps: 5
+steps: 10
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

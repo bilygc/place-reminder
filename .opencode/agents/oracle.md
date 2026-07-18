@@ -2,7 +2,7 @@
 description: Technical guidance, architecture strategy, and engineering best practices advisor
 mode: subagent
 model: opencode/mimo-v2.5-free
-steps: 10
+steps: 12
 temperature: 0.3
 tools:
   # Context gathering (Read-only)
