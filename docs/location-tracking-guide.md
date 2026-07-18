@@ -19,6 +19,8 @@ First, install the required packages:
 npx expo install expo-location expo-task-manager
 ```
 
+> **SDK Compatibility**: This guide is written for **Expo SDK 57** (`~57.0.7`) with React 19.2.3 and React Native 0.86.0. Earlier SDK versions may have different API surfaces (e.g., `notifyOnEntry` was renamed to `notifyOnEnter` in the `GeofenceRegion` type).
+
 ## Integration Steps
 
 ### 1. Add the LocationReminderManager to your app
@@ -110,7 +112,7 @@ const newReminder = {
   latitude: 37.7749, // Location coordinates
   longitude: -122.4194,
   radius: 100, // Geofence radius in meters
-  notifyOnEntry: true, // Notify when entering the geofence
+  notifyOnEnter: true, // Notify when entering the geofence
   notifyOnExit: false, // Don't notify when exiting the geofence
 };
 

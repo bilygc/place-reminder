@@ -12,7 +12,18 @@ const additionalConfig = {
   resolver: {
     // Example resolver options
     assetExts: resolver.assetExts.filter((ext) => ext !== "svg"),
-    sourceExts: [...resolver.sourceExts, "svg"]
+    sourceExts: [...resolver.sourceExts, "svg"],
+    // Evita que Metro escanee carpetas de tooling/agentes (OpenCode, skills, etc.)
+    blockList: [
+      ...(Array.isArray(resolver.blockList)
+        ? resolver.blockList
+        : resolver.blockList
+        ? [resolver.blockList]
+        : []),
+      /.*\.opencode[/\\].*/,
+      /.*\.agents[/\\].*/,
+      /.*\.claude[/\\].*/,
+    ],
   },
   transformer: {
     // Example transformer options
