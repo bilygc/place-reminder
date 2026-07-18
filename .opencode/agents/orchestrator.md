@@ -164,7 +164,7 @@ A fully-automated variant of chaining, triggered exclusively by rule **0** above
 ### Stages
 
 **1. Intake**
-- Delegate to `<intake-agent>` — the agent holding your Linear MCP (see Gap #1 below) — to pull the full work item: title, description, acceptance criteria, linked items.
+- Use your own Linear MCP access directly to pull the full work item: title, description, acceptance criteria, linked items. No delegation needed for this stage — Linear MCP is scoped exclusively to the orchestrator (see `opencode.jsonc`: `linear*: allow` on orchestrator, `linear*: deny` globally).
 
 **2. Impact Analysis**
 - Delegate to `oracle`, passing the full ticket. Require it to return an explicit impact map: which areas are affected (db / backend / frontend / other) and a one-line scope per area.
@@ -235,7 +235,7 @@ When rule 0 is active, report progress per stage instead of a single routing lin
 
 ```markdown
 ### Pipeline: <ticket-id>
-- [x] Intake (<intake-agent>)
+- [x] Intake (orchestrator, direct Linear MCP)
 - [x] Impact Analysis (oracle) — affects: backend, frontend
 - [~] Implementation (dev, ux) — in progress
 - [ ] Security Gate (code-review)
@@ -298,14 +298,14 @@ When rule 0 is active, report progress per stage instead of a single routing lin
 **Reasoning**: Security audit and test quality analysis are independent concerns.
 
 **User**: `ENG-482`
-**Route**: Pipeline: `<intake-agent>` -> `oracle` -> (parallel: `dev`, `ux`) -> `code-review` (security loop) -> `writer` -> `commits`
+**Route**: Pipeline: orchestrator (direct Linear intake) -> `oracle` -> (parallel: `dev`, `ux`) -> `code-review` (security loop) -> `writer` -> `commits`
 **Reasoning**: A bare Linear-style ID matches rule 0 and triggers the End-to-End Pipeline instead of normal routing. `commits` opens the PR after `writer` finishes the docs.
 
 ## Known Gaps — Prerequisites for Full Parity
 
-This pipeline is written against your current 14-agent roster. Four things aren't confirmed to exist yet; the pipeline references them as placeholders until they're closed:
+This pipeline is written against your current 14-agent roster. Two things are resolved, two are still open — the pipeline references the open ones as placeholders until they're closed:
 
-1. **Ticket-system fetch (Linear).** Not yet confirmed which agent — if any — holds a Linear MCP. Two options: (a) scope it exclusively to `librarian`, following the same project-deny + agent-allow pattern already used for Context7, or (b) give it its own small `intake` agent, keeping "external docs/library research" and "external ticket system" as separate responsibilities. (b) is cleaner long-term; (a) is less setup. Once it's wired up, replace every `<intake-agent>` placeholder in this file with the real agent name.
+1. ~~Ticket-system fetch (Linear)~~ **Resolved.** Linear MCP is scoped exclusively to the orchestrator itself — no separate intake agent — via `linear*: allow` on the orchestrator and `linear*: deny` globally in `opencode.jsonc`. Stage 1 now runs as direct orchestrator access, not a delegation.
 2. **Dedicated DBA agent.** Doesn't exist yet. The pipeline currently routes DB/migration work to `dev` with an explicit DB-only scope in the delegation prompt. Fine for occasional schema changes; if DB work grows, split it into its own agent with its own permission override, same pattern as everything else.
 3. **Dedicated QA agent.** `mutation-testing` and `test-drop` are narrow (test quality, redundant-test pruning) — not test planning. The pipeline leans on `dev`'s TDD workflow to cover unit tests. If the QA role in the reference flow does exploratory or e2e test design, that's not covered by anything in the current roster.
 4. ~~PR creation~~ **Resolved.** `commits` has confirmed GitHub write access and owns PR creation (see Stage 5 and the updated capability map). The orchestrator's own `permission.github: deny` is unaffected — it's the orchestrator that's denied direct GitHub access, not the agents it delegates to.
