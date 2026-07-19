@@ -1,7 +1,7 @@
 ---
 description: UI/UX design and frontend development specialist
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/glm-5.2
 temperature: 0.2
 steps: 12
 tools:

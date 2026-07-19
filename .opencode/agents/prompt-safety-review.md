@@ -1,7 +1,7 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/glm-5.2
 steps: 10
 temperature: 0.1
 tools:

@@ -1,7 +1,7 @@
 ---
 description: Fast codebase search and file pattern discovery specialist
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/deepseek-v4-pro
 temperature: 0.0
 tools:
   # Context gathering (Read-only)

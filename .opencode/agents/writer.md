@@ -1,7 +1,7 @@
 ---
 description: Technical documentation author for READMEs, API docs, and guides
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/deepseek-v4-pro
 temperature: 0.3
 steps: 10
 tools:

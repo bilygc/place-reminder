@@ -1,7 +1,7 @@
 ---
 description: Test quality validation via mutation testing analysis
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/glm-5.2
 temperature: 0.1
 steps: 10
 tools:

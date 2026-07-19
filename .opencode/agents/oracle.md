@@ -1,7 +1,7 @@
 ---
 description: Technical guidance, architecture strategy, and engineering best practices advisor
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/kimi-k3
 steps: 12
 temperature: 0.3
 tools:

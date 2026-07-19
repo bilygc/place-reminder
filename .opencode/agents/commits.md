@@ -1,7 +1,7 @@
 ---
 description: Git commit message generator following conventional commit standards
 mode: subagent
-model: opencode/mimo-v2.5-free
+model: opencode/glm-5.2
 temperature: 0.2
 steps: 10
 tools:
