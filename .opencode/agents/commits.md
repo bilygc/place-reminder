@@ -1,7 +1,7 @@
 ---
 description: Git commit message generator following conventional commit standards
 mode: subagent
-model: opencode/glm-5.2
+model: opencode-go/deepseek-v4-pro
 temperature: 0.2
 steps: 10
 tools:

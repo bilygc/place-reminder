@@ -1,7 +1,7 @@
 ---
 description: Fast codebase search and file pattern discovery specialist
 mode: subagent
-model: opencode/deepseek-v4-pro
+model: opencode-go/deepseek-v4-pro
 temperature: 0.0
 tools:
   # Context gathering (Read-only)

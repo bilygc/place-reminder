@@ -1,7 +1,7 @@
 ---
 description: Intelligent router that analyzes user requests and delegates to specialized subagents
 mode: primary
-model: opencode/grok-4.5
+model: opencode-go/grok-4.5
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

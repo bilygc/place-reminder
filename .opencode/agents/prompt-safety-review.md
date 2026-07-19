@@ -1,7 +1,7 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
-model: opencode/glm-5.2
+model: opencode-go/glm-5.2
 steps: 10
 temperature: 0.1
 tools:

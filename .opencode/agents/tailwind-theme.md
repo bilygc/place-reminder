@@ -1,7 +1,7 @@
 ---
 description: Tailwind CSS theme generation and design token configuration specialist
 mode: subagent
-model: opencode/deepseek-v4-pro
+model: opencode-go/deepseek-v4-pro
 temperature: 0.2
 steps: 10
 tools:
