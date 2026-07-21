@@ -3,7 +3,7 @@ description: Technical guidance, architecture strategy, and engineering best pra
 mode: subagent
 model: opencode-go/kimi-k3
 steps: 12
-temperature: 0.3
+temperature: 0.2
 tools:
   # Context gathering (Read-only)
   read: true

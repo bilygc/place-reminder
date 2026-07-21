@@ -3,7 +3,6 @@ description: TDD feature implementation, bug fixing, and refactoring specialist
 mode: subagent
 model: opencode-go/glm-5.2
 temperature: 0.1
-steps: 10
 tools:
   # Context gathering (Read-only)
   read: true
