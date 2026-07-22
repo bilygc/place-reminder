@@ -10,7 +10,7 @@ export interface LocationCard extends Card {
   radius: number; // in meters
   
   // Geofencing options
-  notifyOnEntry?: boolean;
+  notifyOnEnter?: boolean;
   notifyOnExit?: boolean;
   
   // Optional address for display purposes (can be derived from coordinates)

@@ -7,12 +7,13 @@ const LOCATION_BACKGROUND_TASK = 'LOCATION_BACKGROUND_TASK';
 const GEOFENCING_TASK = 'GEOFENCING_TASK';
 
 // Define types
+// Matches expo-location's LocationRegion shape (uses notifyOnEnter, not notifyOnEntry).
 export interface LocationRegion {
   identifier: string;
   latitude: number;
   longitude: number;
   radius: number; // in meters
-  notifyOnEntry?: boolean;
+  notifyOnEnter?: boolean;
   notifyOnExit?: boolean;
 }
 
@@ -54,13 +55,16 @@ TaskManager.defineTask(LOCATION_BACKGROUND_TASK, async ({ data, error }) => {
   }
   
   if (data) {
-    // @ts-ignore - Type issue with TaskManager data
     const { locations } = data as { locations: Location.LocationObject[] };
+    // Guard against malformed task data before using locations[0]
+    if (!Array.isArray(locations) || locations.length === 0) {
+      return;
+    }
     const location = locations[0];
-    
+
     // Update the location state
     locationState.location = location;
-    
+
     // Notify all registered callbacks
     locationCallbacks.forEach(callback => callback(location));
   }
@@ -73,11 +77,14 @@ TaskManager.defineTask(GEOFENCING_TASK, async ({ data, error }) => {
   }
   
   if (data) {
-    // @ts-ignore - Type issue with TaskManager data
     const { eventType, region } = data as { 
       eventType: Location.GeofencingEventType, 
       region: LocationRegion 
     };
+    // Guard against malformed task data before invoking callbacks
+    if (!region || typeof region.identifier !== 'string') {
+      return;
+    }
     
     // Notify all registered geofence callbacks
     geofenceCallbacks.forEach(callback => callback(eventType, region));
@@ -94,7 +101,9 @@ const LocationService = {
   async init(): Promise<LocationState> {
     // Request foreground permission first
     const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-    console.log('Foreground permission status:', foregroundStatus); // Log foreground status
+    if (__DEV__) {
+      console.log('Foreground permission status:', foregroundStatus); // Log foreground status
+    }
     locationState.foregroundPermission = foregroundStatus;
     
     if (foregroundStatus !== 'granted') {
@@ -104,7 +113,9 @@ const LocationService = {
     
     // Then request background permission
     const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    console.log('Background permission status:', backgroundStatus); // Log background status
+    if (__DEV__) {
+      console.log('Background permission status:', backgroundStatus); // Log background status
+    }
     locationState.backgroundPermission = backgroundStatus;
     
     if (backgroundStatus !== 'granted') {
@@ -135,16 +146,19 @@ const LocationService = {
       return false;
     }
     
-    try {
+try {
       await Location.startLocationUpdatesAsync(LOCATION_BACKGROUND_TASK, {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 5 * 60 * 1000, // 5 minutes
         distanceInterval: 100, // 100 meters
-        foregroundService: {
-          notificationTitle: 'Location Tracking',
-          notificationBody: 'Tracking your location for reminders',
-          notificationColor: '#fff',
-        },
+        // Only use foregroundService on Android
+        ...(Platform.OS === 'android' && {
+          foregroundService: {
+            notificationTitle: 'Location Tracking',
+            notificationBody: 'Tracking your location for reminders',
+            notificationColor: '#fff',
+          },
+        }),
       });
       
       locationState.isTracking = true;
@@ -154,7 +168,7 @@ const LocationService = {
       return false;
     }
   },
-  
+   
   /**
    * Start tracking location in the background
    */
@@ -181,7 +195,7 @@ const LocationService = {
         // Optimize for battery
         pausesUpdatesAutomatically: true,
         activityType: Location.ActivityType.Other,
-        showsBackgroundLocationIndicator: false, // iOS only
+        showsBackgroundLocationIndicator: true, // iOS only
       });
       
       locationState.isTracking = true;

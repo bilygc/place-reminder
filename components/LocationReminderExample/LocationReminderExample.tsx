@@ -51,7 +51,7 @@ const LocationReminderExample: React.FC = () => {
       latitude: currentLocation.coords.latitude,
       longitude: currentLocation.coords.longitude,
       radius: parseInt(radius, 10) || 100,
-      notifyOnEntry: true,
+      notifyOnEnter: true,
       notifyOnExit: false,
     };
     

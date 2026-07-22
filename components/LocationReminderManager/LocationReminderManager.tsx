@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {  Alert } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import * as Location from "expo-location";
 import useLocation from "@/hooks/useLocation";
 import { LocationCard } from "@/components/CardReminder/CardReminder.location.types";
-import { LocationRegion } from "@/lib/locationService";
+import { reminderToRegion } from "@/lib/locationRegion";
 
 interface LocationReminderManagerProps {
   children: React.ReactNode;
@@ -35,18 +35,34 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
           onPermissionDenied?.("foreground");
           Alert.alert(
             "Location Permission Required",
-            "This app needs location permission to set reminders based on your location.",
-            [{ text: "OK" }]
+            "Place Reminder needs access to your location to trigger reminders when you enter or leave specific places. Please enable location permission in Settings.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Open Settings",
+                onPress: () => Linking.openSettings(),
+              },
+            ]
           );
           return;
         }
 
         if (location.backgroundPermission !== "granted") {
           onPermissionDenied?.("background");
+          const bgMessage =
+            Platform.OS === "android"
+              ? "Place Reminder needs background location access to notify you when you enter or leave reminder locations. On Android 11+, open Settings and choose \"Allow all the time\" for background location."
+              : "Place Reminder needs background location access to notify you when you enter or leave reminder locations. Please enable \"Always\" under Location in Settings.";
           Alert.alert(
             "Background Location Permission Required",
-            "This app needs background location permission to notify you when you enter or leave reminder locations.",
-            [{ text: "OK" }]
+            bgMessage,
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Open Settings",
+                onPress: () => Linking.openSettings(),
+              },
+            ]
           );
           return;
         }
@@ -71,7 +87,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
             // Show a notification
             if (
               (eventType === Location.GeofencingEventType.Enter &&
-                reminder.notifyOnEntry) ||
+                reminder.notifyOnEnter) ||
               (eventType === Location.GeofencingEventType.Exit &&
                 reminder.notifyOnExit)
             ) {
@@ -107,8 +123,10 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
   }, []);
 
   useEffect(() => {
-    console.log('Foreground permission in LocationReminderManager:', location.foregroundPermission); // Log foreground permission
-    console.log('Background permission in LocationReminderManager:', location.backgroundPermission); // Log background permission
+    if (__DEV__) {
+      console.log('Foreground permission in LocationReminderManager:', location.foregroundPermission); // Log foreground permission
+      console.log('Background permission in LocationReminderManager:', location.backgroundPermission); // Log background permission
+    }
 
     if (!location.foregroundPermission || location.foregroundPermission !== 'granted') {
       onPermissionDenied?.('foreground');
@@ -124,14 +142,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
     async (reminder: LocationCard) => {
       try {
         // Convert reminder to geofence region
-        const region: LocationRegion = {
-          identifier: reminder.$id,
-          latitude: reminder.latitude,
-          longitude: reminder.longitude,
-          radius: reminder.radius,
-          notifyOnEntry: reminder.notifyOnEntry ?? true,
-          notifyOnExit: reminder.notifyOnExit ?? false,
-        };
+        const region = reminderToRegion(reminder);
 
         // Add the geofence
         const success = await location.addGeofence(region);
@@ -181,14 +192,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
         await location.removeGeofence(reminder.$id);
 
         // Then add the updated geofence
-        const region: LocationRegion = {
-          identifier: reminder.$id,
-          latitude: reminder.latitude,
-          longitude: reminder.longitude,
-          radius: reminder.radius,
-          notifyOnEntry: reminder.notifyOnEntry ?? true,
-          notifyOnExit: reminder.notifyOnExit ?? false,
-        };
+        const region = reminderToRegion(reminder);
 
         const success = await location.addGeofence(region);
 

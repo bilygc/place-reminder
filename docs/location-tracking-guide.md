@@ -21,6 +21,28 @@ npx expo install expo-location expo-task-manager
 
 > **SDK Compatibility**: This guide is written for **Expo SDK 57** (`~57.0.7`) with React 19.2.3 and React Native 0.86.0. Earlier SDK versions may have different API surfaces (e.g., `notifyOnEntry` was renamed to `notifyOnEnter` in the `GeofenceRegion` type).
 
+## Dev Build Required
+
+**Background location tracking and geofencing do not work in Expo Go on Android.** You must use a development build to test location-based reminders on an Android device. This is because Expo Go does not include the native modules required for background location services and geofencing.
+
+To create a dev build:
+
+```bash
+# Using EAS (creates a dev client build with the "development" profile)
+eas build --platform android --profile development
+
+# Or run directly on a connected device / emulator
+npx expo run:android
+```
+
+The project includes three EAS build profiles in `eas.json`:
+
+| Profile | Use case |
+|---------|----------|
+| `development` | Dev client with `developmentClient: true` — use for local testing of background location features |
+| `preview` | Internal distribution for testers |
+| `production` | Store-ready build for submission |
+
 ## Integration Steps
 
 ### 1. Add the LocationReminderManager to your app
@@ -79,7 +101,8 @@ Add the following to your `app.json` file:
           "locationAlwaysPermission": "Allow Place Reminder to use your location in the background to trigger reminders when you enter or leave specific places.",
           "locationWhenInUsePermission": "Allow Place Reminder to use your location to trigger reminders when you enter or leave specific places.",
           "isIosBackgroundLocationEnabled": true,
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],
@@ -92,7 +115,9 @@ Add the following to your `app.json` file:
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ]
     }
   }
@@ -152,19 +177,50 @@ You can adjust these settings in the `locationService.ts` file to meet your spec
 
 ## Testing
 
-To test geofencing:
+### Unit Tests
 
-1. Add a location-based reminder at your current location
-2. Move away from the location (more than the specified radius)
-3. Return to the location
+Run the unit test suite with:
+
+```bash
+npm test
+```
+
+This executes `jest --ci` and runs all test files, including the unit tests for the `reminderToRegion` helper in `lib/__tests__/locationRegion.test.ts`. These tests verify:
+
+- Default values: `notifyOnEnter` defaults to `true` and `notifyOnExit` defaults to `false`
+- Explicit flags: custom `notifyOnEnter` / `notifyOnExit` values are preserved
+- Field passthrough: `identifier`, `latitude`, `longitude`, and `radius` are correctly mapped
+
+### Manual Testing
+
+To test geofencing on a device:
+
+1. Build and install a development build (Expo Go on Android does not support background geofencing)
+2. Add a location-based reminder at your current location
+3. Move away from the location (more than the specified radius)
+4. Return to the location
 
 You should receive notifications when entering or exiting the geofence, depending on your notification settings.
 
+## Permission Denial UX
+
+When the user denies location permissions, the `LocationReminderManager` component handles the flow:
+
+1. **Foreground permission denied**: An `Alert` is shown explaining that location access is required. The user can tap **Open Settings** to navigate to the app's system settings via `Linking.openSettings()`.
+
+2. **Background permission denied**: An `Alert` is shown with platform-specific guidance:
+   - **Android**: The message instructs the user to choose **"Allow all the time"** in Settings (required for background location on Android 11+).
+   - **iOS**: The message instructs the user to enable **"Always"** under Location in Settings.
+   
+   Tapping **Open Settings** deep-links into the app's system settings on both platforms.
+
+In both cases, the `onPermissionDenied` callback is called with the permission type (`"foreground"` or `"background"`) for custom handling.
+
 ## Troubleshooting
 
-- **Location permissions denied**: Make sure you've configured your app.json correctly and that the user has granted location permissions.
-- **Geofencing not working**: Ensure that background location is enabled and that the geofence radius is appropriate for your use case.
-- **Battery drain**: Adjust the update interval and distance filter in locationService.ts to reduce battery usage.
+- **Location permissions denied**: The app shows an Alert with an **Open Settings** button that deep-links to the system settings. On Android, make sure to select "Allow all the time" for background location. Verify `app.json` includes `isAndroidForegroundServiceEnabled: true` and the `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_LOCATION` permissions.
+- **Geofencing not working**: Background geofencing requires a **development build** — it does not work in Expo Go on Android. Use `eas build --profile development` or `npx expo run:android`. Also ensure the geofence radius is appropriate for your use case.
+- **Battery drain**: Adjust the update interval and distance filter in `lib/locationService.ts` to reduce battery usage.
 
 ## Additional Resources
 
