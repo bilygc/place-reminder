@@ -29,14 +29,31 @@ import type {
   // VideoPost,
 } from "./appwrite.types";
 
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value || value.trim() === "") {
+    throw new Error(
+      `[appwrite config] Missing required env var: ${name}. ` +
+        `Check your .env file (see .env.example) or, if running in CI, ` +
+        `confirm the corresponding GitHub Secret is set.`
+    );
+  }
+  return value;
+}
+
 export const config = {
-  endpoint: process.env.EXPO_PUBLIC_ENDPOINT || "",
-  platform: process.env.EXPO_PUBLIC_PLATFORM || "",
-  projectId: process.env.EXPO_PUBLIC_PROJECT_ID || "",
-  databaseId: process.env.EXPO_PUBLIC_DATABASE_ID || "",
-  userCollectionId: process.env.EXPO_PUBLIC_USER_COLLECTION_ID || "",
-  reminderCollectionId: process.env.EXPO_PUBLIC_REMINDER_COLLECTION_ID || "",
-  storageId: process.env.EXPO_PUBLIC_STORAGE_ID || "",
+  endpoint: requireEnv("EXPO_PUBLIC_ENDPOINT", process.env.EXPO_PUBLIC_ENDPOINT),
+  platform: requireEnv("EXPO_PUBLIC_PLATFORM", process.env.EXPO_PUBLIC_PLATFORM),
+  projectId: requireEnv("EXPO_PUBLIC_PROJECT_ID", process.env.EXPO_PUBLIC_PROJECT_ID),
+  databaseId: requireEnv("EXPO_PUBLIC_DATABASE_ID", process.env.EXPO_PUBLIC_DATABASE_ID),
+  userCollectionId: requireEnv(
+    "EXPO_PUBLIC_USER_COLLECTION_ID",
+    process.env.EXPO_PUBLIC_USER_COLLECTION_ID
+  ),
+  reminderCollectionId: requireEnv(
+    "EXPO_PUBLIC_REMINDER_COLLECTION_ID",
+    process.env.EXPO_PUBLIC_REMINDER_COLLECTION_ID
+  ),
+  storageId: requireEnv("EXPO_PUBLIC_STORAGE_ID", process.env.EXPO_PUBLIC_STORAGE_ID),
 };
 
 // Init your React Native SDK
@@ -59,25 +76,19 @@ export const createUser: CreateUserFunction = async (
   username
 ) => {
   try {
-    console.log("1");
     const newAccount = await account.create(
       ID.unique(),
       email,
       password,
       username
     );
-    console.log("2");
     if (!newAccount) {
       throw Error;
     }
-    console.log("3");
 
     const avatarUrl = avatars.getInitials(username);
-    console.log("4");
 
     await signIn(email, password);
-    console.log("5");
-    console.log({ newAccount: newAccount.$id });
 
     const newUser = await database.createDocument(
       config.databaseId,
@@ -90,7 +101,6 @@ export const createUser: CreateUserFunction = async (
         avatar: avatarUrl,
       }
     );
-    console.log("6");
 
     return newUser;
   } catch (error: unknown) {
@@ -130,7 +140,6 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     }
 
     const user = currentUser.documents[0];
-    console.log("user", user);
     return user;
   } catch (error: unknown) {
     const err = ensureError(error);
@@ -255,61 +264,6 @@ export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
     throw new Error(err.message);
   }
 };
-
-// export const uploadFile: UploadFileFunction = async (file, type) => {
-//   if (!file) return;
-
-//   const asset = {
-//     name: file.fileName,
-//     type: file.mimeType,
-//     size: file.fileSize,
-//     uri: file.uri,
-//   };
-
-//   try {
-//     const uploadedFile = await storage.createFile(
-//       config.storageId,
-//       ID.unique(),
-//       asset
-//     );
-
-//     const fileUrl = await getFilePreview(uploadedFile.$id, type);
-//     return fileUrl;
-//   } catch (error: unknown) {
-//     throw new Error(error);
-//   }
-// };
-
-// export const createVideo: CreateVideoFunction = async ({
-//   video,
-//   thumbnail,
-//   title,
-//   prompt,
-//   userId,
-// }) => {
-//   try {
-//     const [thumbnailUrl, videoUrl] = await Promise.all([
-//       uploadFile(thumbnail, "image"),
-//       uploadFile(video, "video"),
-//     ]);
-
-//     const newPost = await database.createDocument(
-//       config.databaseId,
-//       config.reminderCollectionId,
-//       ID.unique(),
-//       {
-//         title,
-//         thumbnail: thumbnailUrl,
-//         video: videoUrl,
-//         prompt,
-//         creator: userId,
-//       }
-//     );
-//     return newPost;
-//   } catch (error: unknown) {
-//     throw new Error(error);
-//   }
-// };
 
 /**
  *
