@@ -212,6 +212,16 @@ A fully-automated variant of chaining, triggered exclusively by rule **0** above
   with the specific area and failure reason — do not silently drop that area from
   the pipeline).
 
+  **3.5 Build & Runtime Gate (loop)**
+  - Delegate to `build-verify`, passing every diff produced in Stage 3.
+  - Runs: typecheck (`tsc --noEmit`), lint, `expo doctor` (o `expo-doctor`), 
+    and a headless build (`eas build --local` o `expo prebuild` + `gradlew assembleDebug`).
+  - Build passes -> proceed to Stage 4 (Security Gate).
+  - Build fails:
+    1. Delegate fix task back to the owning agent from Stage 3.
+    2. Re-run `build-verify`.
+    3. Repeat up to 3 times (mismo retry ceiling que ya usas en Security Gate).
+
 **4. Security Gate (loop)**
 - Delegate to `code-review`, explicitly scoped to a security-only pass, passing every diff produced in Stage 3.
 - No High-severity findings -> proceed to Stage 5.
