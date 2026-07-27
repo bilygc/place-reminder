@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, Alert, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { useLocationReminders } from '@/components/LocationReminderManager/LocationReminderManager';
 import { LocationCard } from '@/components/CardReminder/CardReminder.location.types';
@@ -15,33 +15,34 @@ const LocationReminderExample: React.FC = () => {
     currentLocation,
     isInitialized,
   } = useLocationReminders();
-  
-  const [reminders, setReminders] = useState<LocationCard[]>([]);
+
+  // `reminders` already lives as real state inside LocationReminderManager.
+  // getLocationReminders() is a useCallback keyed on that state, so it's
+  // safe (and correct) to derive this directly during render instead of
+  // copying it into a second useState via a useEffect — that was causing
+  // an unnecessary extra render pass on every reminders change.
+  const reminders = getLocationReminders();
+
   const [reminderText, setReminderText] = useState('');
   const [radius, setRadius] = useState('100'); // Default radius in meters
-  
-  // Load reminders on mount
-  useEffect(() => {
-    setReminders(getLocationReminders());
-  }, [getLocationReminders]);
-  
+
   // Add a new location-based reminder at the current location
   const handleAddReminder = async () => {
     if (!isInitialized()) {
       Alert.alert('Location Not Ready', 'Please wait for location services to initialize.');
       return;
     }
-    
+
     if (!currentLocation) {
       Alert.alert('No Location', 'Unable to get your current location. Please try again later.');
       return;
     }
-    
+
     if (!reminderText.trim()) {
       Alert.alert('Empty Reminder', 'Please enter a reminder text.');
       return;
     }
-    
+
     // Create a new reminder
     const newReminder: LocationCard = {
       $id: `reminder-${Date.now()}`, // Generate a unique ID
@@ -54,35 +55,33 @@ const LocationReminderExample: React.FC = () => {
       notifyOnEnter: true,
       notifyOnExit: false,
     };
-    
+
     // Add the reminder
     const success = await addLocationReminder(newReminder);
-    
+
     if (success) {
       setReminderText('');
-      setReminders(getLocationReminders());
       Alert.alert('Reminder Added', 'Your location-based reminder has been added.');
     } else {
       Alert.alert('Error', 'Failed to add the reminder. Please try again.');
     }
   };
-  
+
   // Remove a reminder
   const handleRemoveReminder = async (reminderId: string) => {
     const success = await removeLocationReminder(reminderId);
-    
+
     if (success) {
-      setReminders(getLocationReminders());
       Alert.alert('Reminder Removed', 'Your location-based reminder has been removed.');
     } else {
       Alert.alert('Error', 'Failed to remove the reminder. Please try again.');
     }
   };
-  
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Location-Based Reminders</Text>
-      
+
       {/* Current location display */}
       <View style={styles.locationContainer}>
         <Text style={styles.locationTitle}>Current Location:</Text>
@@ -95,7 +94,7 @@ const LocationReminderExample: React.FC = () => {
           <Text style={styles.locationText}>Waiting for location...</Text>
         )}
       </View>
-      
+
       {/* Add reminder form */}
       <View style={styles.formContainer}>
         <TextInput
@@ -119,7 +118,7 @@ const LocationReminderExample: React.FC = () => {
           <Text style={styles.buttonText}>Add Location Reminder</Text>
         </TouchableOpacity>
       </View>
-      
+
       {/* Reminders list */}
       <View style={styles.remindersContainer}>
         <Text style={styles.remindersTitle}>Your Reminders:</Text>

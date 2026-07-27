@@ -1,0 +1,91 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+      "headers": {
+        "CONTEXT7_API_KEY": "{ENV:CONTEXT7_API_KEY}"
+      }
+    },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "enabled":true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_PAT}"
+      }
+    },
+    "linear": {
+      "type": "remote",
+      "url": "https://mcp.linear.app/mcp",
+      "enabled": true
+    },
+    "expo": {
+      "type": "remote",
+      "url": "https://mcp.expo.dev/mcp",
+      "enabled": true
+    },
+    "appwrite": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "mcp-server-appwrite"
+      ],
+      "enabled": true,
+      "environment": {
+        "APPWRITE_API_KEY": "{env:APPWRITE_API_KEY}",
+        "APPWRITE_PROJECT_ID": "{env:APPWRITE_PROJECT_ID}",
+        "APPWRITE_ENDPOINT": "{env:APPWRITE_ENDPOINT}"
+      }
+    }
+  },
+  "permission": {
+    "context7*": "deny",
+    "github*": "deny",
+    "linear*": "deny",
+    "expo*": "deny",
+    "appwrite*": "deny"
+  },
+  "agent": {
+    "librarian": {
+      "permission": {
+        "context7*": "allow"
+      }
+    },
+    "commits": {
+      "permission": {
+        "github*": "allow"
+      }
+    },
+    "orchestrator": {
+      "permission": {
+        "linear*": "allow"
+      }
+    },
+    "dev":{
+      "permission": {
+        "expo*": "allow"
+      }   
+    },
+    "dba":{
+      "permission":{
+        "appwrite*": "allow"
+      }
+    },
+    "build-verify": {
+      "permission": {
+        "context7*": "deny",
+        "github*": "deny",
+        "linear*": "deny",
+        "expo*": "deny",
+        "appwrite*": "deny"
+      }
+    }
+  },
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}

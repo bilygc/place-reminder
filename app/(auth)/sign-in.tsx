@@ -1,27 +1,27 @@
-import { View, Text, ScrollView } from "react-native";
-import { Link } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { images } from "@/constants";
+import { View, Text, ScrollView } from 'react-native';
+import { Link } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { images } from '@/constants';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
   withDelay,
-} from "react-native-reanimated";
-import { FormField } from "@/components/FormField";
-import CustomButton from "@/components/CustomButton";
-import { useAppwrite } from "@/hooks/useAppwrite";
-import { signIn } from "@/lib/appwrite";
-import { GreenLoading } from "@/components/Loading/Loading";
+} from 'react-native-reanimated';
+import { FormField } from '@/components/FormField';
+import CustomButton from '@/components/CustomButton';
+import { useAppwrite } from '@/hooks/useAppwrite';
+import { signIn } from '@/lib/appwrite';
+import { GreenLoading } from '@/components/Loading/Loading';
 
 const SignIn = () => {
-  const [signInData, setSignInData] = useState({ Email: "", Password: "" });
+  const [signInData, setSignInData] = useState({ Email: '', Password: '' });
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
-  const { refetch, isLoading, error } = useAppwrite(() =>
+  const { refetch, isLoading } = useAppwrite(() =>
     signIn(signInData.Email, signInData.Password)
   );
 
@@ -32,7 +32,7 @@ const SignIn = () => {
       withTiming(360, { duration: 2000 }),
       withDelay(1000, withTiming(360, { duration: 2000 }))
     );
-  }, []);
+  }, [opacity, rotate, scale]);
 
   const { AppLogo } = images;
 
@@ -104,7 +104,7 @@ const SignIn = () => {
             />
           </View>
           <Text className="text-green-50 mt-5 text-center font-inmedium">
-            Don't have an account?{" "}
+            Don't have an account?{' '}
             <Link href="/sign-up" className="text-secondary font-inbold">
               Sign up
             </Link>

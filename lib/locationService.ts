@@ -146,7 +146,7 @@ const LocationService = {
       return false;
     }
     
-try {
+    try {
       await Location.startLocationUpdatesAsync(LOCATION_BACKGROUND_TASK, {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 5 * 60 * 1000, // 5 minutes

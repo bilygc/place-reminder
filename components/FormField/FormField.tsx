@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
-import { icons } from "@/constants";
-import type { FormFieldProps } from "./FormField.types";
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import { icons } from '@/constants';
+import type { FormFieldProps } from './FormField.types';
 
 const FormField = ({
   title,
@@ -25,7 +25,7 @@ const FormField = ({
           className="flex-1 font-insemiBold"
           placeholder={placeholder}
           placeholderTextColor="#7b7b8b"
-          secureTextEntry={title === "Password" && !showPassword}
+          secureTextEntry={title === 'Password' && !showPassword}
           value={value}
           onChangeText={handleChangeText}
           {...props}

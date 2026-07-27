@@ -1,22 +1,21 @@
-import React, { useEffect, useState } from "react";
-import { images, icons } from "@/constants";
-import { FlatList, TouchableOpacity, Image } from "react-native";
-import { View, Text, ScrollView } from "react-native";
-import { useLocationReminders } from "@/components/LocationReminderManager/LocationReminderManager";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useEffect, useState } from 'react';
+import { images, icons } from '@/constants';
+import { FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
   withDelay,
-} from "react-native-reanimated";
-import { FormField } from "@/components/FormField";
-import CustomButton from "@/components/CustomButton";
-import CardReminder from "@/components/CardReminder/CardReminder";
+} from 'react-native-reanimated';
+import { FormField } from '@/components/FormField';
+import CustomButton from '@/components/CustomButton';
+import CardReminder from '@/components/CardReminder/CardReminder';
 
 const Home = () => {
-  const [reminder, setReminder] = useState("");
+  const [reminder, setReminder] = useState('');
   // const {
   //   addLocationReminder,
   //   removeLocationReminder,
@@ -41,6 +40,7 @@ const Home = () => {
       transform: [{ rotate: `${rotate.value}deg` }],
     };
   });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
     opacity.value = withTiming(1, { duration: 500 });
@@ -55,7 +55,7 @@ const Home = () => {
   };
 
   const handleButton = () => {
-    console.log("Reminder added");
+    console.log('Reminder added');
   };
 
   return (
@@ -63,29 +63,29 @@ const Home = () => {
       <FlatList
         data={[
           {
-            at: "Evergreen Terrace, 742",
-            do: "Ask for beer to Homer",
+            at: 'Evergreen Terrace, 742',
+            do: 'Ask for beer to Homer',
             active: false,
-            $id: "iousdjcbcikaiuywe734g",
+            $id: 'iousdjcbcikaiuywe734g',
           },
           {
-            at: "Evergreen Terrace, 742",
-            do: "Ask for beer to Homer",
+            at: 'Evergreen Terrace, 742',
+            do: 'Ask for beer to Homer',
             active: true,
-            $id: "ioucbcikaiuywe734g",
+            $id: 'ioucbcikaiuywe734g',
           },
           {
-            at: "Evergreen Terrace, 742",
-            do: "Ask for beer to Homer",
+            at: 'Evergreen Terrace, 742',
+            do: 'Ask for beer to Homer',
             active: false,
-            $id: "ioukaiuywe734g",
+            $id: 'ioukaiuywe734g',
           },
         ]}
         keyExtractor={(item) => item.$id}
         contentContainerStyle={{
-          backgroundColor: "#E1FFF3",
-          height: "auto",
-          paddingBottom: "100%",
+          backgroundColor: '#E1FFF3',
+          height: 'auto',
+          paddingBottom: '100%',
         }}
         renderItem={({ item }) => (
           <View className="flex my-4">
@@ -132,10 +132,10 @@ const Home = () => {
                   </View>
                   <View className="flex-none w-[47px] h-[47px]">
                     <TouchableOpacity
-                      onPress={() => console.log("mic pressed")}
+                      onPress={() => console.log('mic pressed')}
                       activeOpacity={0.7}
                       className={
-                        "bg-secondary rounded-full justify-center items-center px-8 py-6"
+                        'bg-secondary rounded-full justify-center items-center px-8 py-6'
                       }
                       disabled={false}
                     >

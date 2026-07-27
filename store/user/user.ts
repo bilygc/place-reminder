@@ -1,6 +1,6 @@
-import { makeAutoObservable } from "mobx";
-import type { UserData, UserSession } from "./user.types";
-import { createContext } from "react";
+import { makeAutoObservable } from 'mobx';
+import type { UserData, UserSession } from './user.types';
+import { createContext } from 'react';
 
 export class User {
   private _session: UserSession;
@@ -10,10 +10,10 @@ export class User {
 
   constructor() {
     // Initialize with default values
-    this._session = { $id: "", isLoggedIn: false };
-    this._email = "";
-    this._userName = "";
-    this._avatar = "";
+    this._session = { $id: '', isLoggedIn: false };
+    this._email = '';
+    this._userName = '';
+    this._avatar = '';
     makeAutoObservable(this);
   }
 
@@ -25,10 +25,10 @@ export class User {
   }
 
   logout(): void {
-    this._session = { $id: "", isLoggedIn: false };
-    this._email = "";
-    this._userName = "";
-    this._avatar = "";
+    this._session = { $id: '', isLoggedIn: false };
+    this._email = '';
+    this._userName = '';
+    this._avatar = '';
   }
 
   // Getters

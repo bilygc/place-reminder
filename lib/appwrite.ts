@@ -7,9 +7,9 @@ import {
   Query,
   Storage,
   ImageGravity,
-} from "react-native-appwrite";
+} from 'react-native-appwrite';
 
-import ensureError from "@/utils/ensureError";
+import ensureError from '@/utils/ensureError';
 
 import type {
   CreateUserFunction,
@@ -27,33 +27,33 @@ import type {
   BookmarkVideoFunction,
   // FileAsset,
   // VideoPost,
-} from "./appwrite.types";
+} from './appwrite.types';
 
 function requireEnv(name: string, value: string | undefined): string {
-  if (!value || value.trim() === "") {
+  if (!value || value.trim() === '') {
     throw new Error(
       `[appwrite config] Missing required env var: ${name}. ` +
-        `Check your .env file (see .env.example) or, if running in CI, ` +
-        `confirm the corresponding GitHub Secret is set.`
+        'Check your .env file (see .env.example) or, if running in CI, ' +
+        'confirm the corresponding GitHub Secret is set.'
     );
   }
   return value;
 }
 
 export const config = {
-  endpoint: requireEnv("EXPO_PUBLIC_ENDPOINT", process.env.EXPO_PUBLIC_ENDPOINT),
-  platform: requireEnv("EXPO_PUBLIC_PLATFORM", process.env.EXPO_PUBLIC_PLATFORM),
-  projectId: requireEnv("EXPO_PUBLIC_PROJECT_ID", process.env.EXPO_PUBLIC_PROJECT_ID),
-  databaseId: requireEnv("EXPO_PUBLIC_DATABASE_ID", process.env.EXPO_PUBLIC_DATABASE_ID),
+  endpoint: requireEnv('EXPO_PUBLIC_ENDPOINT', process.env.EXPO_PUBLIC_ENDPOINT),
+  platform: requireEnv('EXPO_PUBLIC_PLATFORM', process.env.EXPO_PUBLIC_PLATFORM),
+  projectId: requireEnv('EXPO_PUBLIC_PROJECT_ID', process.env.EXPO_PUBLIC_PROJECT_ID),
+  databaseId: requireEnv('EXPO_PUBLIC_DATABASE_ID', process.env.EXPO_PUBLIC_DATABASE_ID),
   userCollectionId: requireEnv(
-    "EXPO_PUBLIC_USER_COLLECTION_ID",
+    'EXPO_PUBLIC_USER_COLLECTION_ID',
     process.env.EXPO_PUBLIC_USER_COLLECTION_ID
   ),
   reminderCollectionId: requireEnv(
-    "EXPO_PUBLIC_REMINDER_COLLECTION_ID",
+    'EXPO_PUBLIC_REMINDER_COLLECTION_ID',
     process.env.EXPO_PUBLIC_REMINDER_COLLECTION_ID
   ),
-  storageId: requireEnv("EXPO_PUBLIC_STORAGE_ID", process.env.EXPO_PUBLIC_STORAGE_ID),
+  storageId: requireEnv('EXPO_PUBLIC_STORAGE_ID', process.env.EXPO_PUBLIC_STORAGE_ID),
 };
 
 // Init your React Native SDK
@@ -132,7 +132,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     const currentUser = await database.listDocuments(
       config.databaseId,
       config.userCollectionId,
-      [Query.equal("accountid", currentAccount.$id)]
+      [Query.equal('accountid', currentAccount.$id)]
     );
 
     if (!currentUser) {
@@ -168,7 +168,7 @@ export const getLatestPosts: GetLatestPostsFunction = async () => {
     const posts = await database.listDocuments(
       config.databaseId,
       config.reminderCollectionId,
-      [Query.orderDesc("$createdAt")]
+      [Query.orderDesc('$createdAt')]
     );
     return posts.documents;
   } catch (error: unknown) {
@@ -186,8 +186,8 @@ export const getBookmarkedPosts: GetBookmarkedPostsFunction = async (
       config.databaseId,
       config.reminderCollectionId,
       [
-        Query.contains("bookmarkedByUserId", userId),
-        Query.orderDesc("$createdAt"),
+        Query.contains('bookmarkedByUserId', userId),
+        Query.orderDesc('$createdAt'),
       ]
     );
     return posts.documents;
@@ -203,7 +203,7 @@ export const searchPosts: SearchPostsFunction = async (query) => {
     const posts = await database.listDocuments(
       config.databaseId,
       config.reminderCollectionId,
-      [Query.search("title", query)]
+      [Query.search('title', query)]
     );
     return posts.documents;
   } catch (error: unknown) {
@@ -218,7 +218,7 @@ export const getUserPosts: GetUserPostsFunction = async (userId) => {
     const posts = await database.listDocuments(
       config.databaseId,
       config.reminderCollectionId,
-      [Query.equal("creator", userId), Query.orderDesc("$createdAt")]
+      [Query.equal('creator', userId), Query.orderDesc('$createdAt')]
     );
     return posts.documents;
   } catch (error: unknown) {
@@ -230,7 +230,7 @@ export const getUserPosts: GetUserPostsFunction = async (userId) => {
 
 export const signOut: SignOutFunction = async () => {
   try {
-    const session = await account.deleteSession("current");
+    const session = await account.deleteSession('current');
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
@@ -242,9 +242,9 @@ export const signOut: SignOutFunction = async () => {
 export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
   let fileUrl;
   try {
-    if (type === "video") {
+    if (type === 'video') {
       fileUrl = await storage.getFileView(config.storageId, fileId);
-    } else if (type === "image") {
+    } else if (type === 'image') {
       fileUrl = await storage.getFilePreview(
         config.storageId,
         fileId,
@@ -254,7 +254,7 @@ export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
         100
       );
     } else {
-      throw new Error("Invalid file type");
+      throw new Error('Invalid file type');
     }
     if (!fileUrl) throw Error;
     return fileUrl;

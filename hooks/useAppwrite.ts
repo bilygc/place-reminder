@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import ensureError from "@/utils/ensureError";
+import { useEffect, useState } from 'react';
+import ensureError from '@/utils/ensureError';
 
 export const useAppwrite = <T>(fn: () => Promise<T>) => {
   const [data, setData] = useState<T[]>([]);

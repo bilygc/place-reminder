@@ -1,4 +1,4 @@
-import { Models } from "react-native-appwrite";
+import { Models } from 'react-native-appwrite';
 
 export interface UserCredentials {
   email: string;
@@ -66,12 +66,12 @@ export type SignOutFunction = () => SignOutResponse;
 
 export type GetFilePreviewFunction = (
   fileId: string,
-  type: "video" | "image"
+  type: 'video' | 'image'
 ) => GetFilePreviewResponse;
 
 export type UploadFileFunction = (
   file: FileAsset,
-  type: "video" | "image"
+  type: 'video' | 'image'
 ) => UploadFileResponse;
 
 export type CreateVideoFunction = (params: VideoPost) => CreateVideoResponse;
