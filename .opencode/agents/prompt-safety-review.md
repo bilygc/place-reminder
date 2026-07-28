@@ -1,7 +1,7 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
-model: opencode-go/glm-5.2
+model: opencode-go/qwen3.7-max
 steps: 10
 temperature: 0.1
 tools:

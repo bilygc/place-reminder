@@ -1,30 +1,30 @@
-import React, { useEffect, useContext } from "react";
-import { configure } from "mobx";
-import { router, Redirect } from "expo-router";
-import { View, Text } from "react-native";
-import { images } from "@/constants";
+import React, { useEffect, useContext } from 'react';
+import { configure } from 'mobx';
+import { router, Redirect } from 'expo-router';
+import { View, Text } from 'react-native';
+import { images } from '@/constants';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
   withDelay,
-  Easing,
-} from "react-native-reanimated";
-import CustomButton from "@/components/CustomButton";
-import { observer } from "mobx-react-lite";
-import { UserContext } from "@/store/user";
+} from 'react-native-reanimated';
+import CustomButton from '@/components/CustomButton';
+import { observer } from 'mobx-react-lite';
+import { UserContext } from '@/store/user';
 
-configure({ enforceActions: "observed" }); // Ensure actions are used for modifications
+configure({ enforceActions: 'observed' }); // Ensure actions are used for modifications
 
 const SplashScreen = observer(() => {
   const user = useContext(UserContext);
-  console.log("is logged in", user.isLoggedIn);
+  console.log('is logged in', user.isLoggedIn);
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
     opacity.value = withTiming(1, { duration: 500 });
@@ -38,7 +38,7 @@ const SplashScreen = observer(() => {
       opacity: opacity.value,
       transform: [{ scale: scale.value }],
     };
-  });
+  }, [opacity, rotate, scale]);
   const iconStyle = useAnimatedStyle(() => {
     return {
       transform: [{ rotate: `${rotate.value}deg` }],
@@ -73,7 +73,7 @@ const SplashScreen = observer(() => {
       </Animated.View>
       <CustomButton
         title="Continue with email"
-        handlePress={() => router.push("/sign-in")}
+        handlePress={() => router.push('/sign-in')}
         containerStyles="mt-5"
         textStyles="text-light text-lg font-insemiBold"
       />

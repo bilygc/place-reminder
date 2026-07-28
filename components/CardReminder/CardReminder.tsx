@@ -1,7 +1,7 @@
-import React from "react";
-import { View, Text, Pressable, Image } from "react-native";
-import type { CardProps } from "@/components/CardReminder/CardReminder.types";
-import icons from "@/constants/icons";
+import React from 'react';
+import { View, Text, Pressable, Image } from 'react-native';
+import type { CardProps } from '@/components/CardReminder/CardReminder.types';
+import icons from '@/constants/icons';
 
 const CardReminder: React.FC<CardProps> = ({ card }) => {
   return (
@@ -26,8 +26,8 @@ const CardReminder: React.FC<CardProps> = ({ card }) => {
         </View>
         <View>
           <Text className="text-gray-50">
-            <Text className="text-primary">Active</Text>{" "}
-            {card.active ? "ON" : "OFF"}
+            <Text className="text-primary">Active</Text>{' '}
+            {card.active ? 'ON' : 'OFF'}
           </Text>
         </View>
       </View>

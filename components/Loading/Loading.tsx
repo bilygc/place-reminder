@@ -1,14 +1,17 @@
-import React from "react";
-import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 
 interface GreenLoadingProps {
   size?: number;
 }
 
 export const GreenLoading: React.FC<GreenLoadingProps> = ({ size = 10 }) => {
-  const animation1 = React.useRef(new Animated.Value(0)).current;
-  const animation2 = React.useRef(new Animated.Value(0)).current;
-  const animation3 = React.useRef(new Animated.Value(0)).current;
+  // Use state (not refs) so these values are safe to read during render.
+  // The lazy initializer runs once, so identity stays stable across
+  // re-renders — same effect as a ref, without triggering react-hooks/refs.
+  const [animation1] = useState(() => new Animated.Value(0));
+  const [animation2] = useState(() => new Animated.Value(0));
+  const [animation3] = useState(() => new Animated.Value(0));
 
   React.useEffect(() => {
     const animate = (animation: Animated.Value) => {
@@ -31,9 +34,18 @@ export const GreenLoading: React.FC<GreenLoadingProps> = ({ size = 10 }) => {
     };
 
     animate(animation1);
-    setTimeout(() => animate(animation2), 166);
-    setTimeout(() => animate(animation3), 333);
-  }, [animation1, animation2, animation3]); // Added dependencies
+    const timeout2 = setTimeout(() => animate(animation2), 166);
+    const timeout3 = setTimeout(() => animate(animation3), 333);
+
+    return () => {
+      clearTimeout(timeout2);
+      clearTimeout(timeout3);
+      animation1.stopAnimation();
+      animation2.stopAnimation();
+      animation3.stopAnimation();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // animation1/2/3 have stable identity (lazy useState init); intentionally run once.
 
   const scaleInterpolate = (animation: Animated.Value) =>
     animation.interpolate({
@@ -82,21 +94,21 @@ export const GreenLoading: React.FC<GreenLoadingProps> = ({ size = 10 }) => {
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: "center",
+    alignItems: 'center',
   },
   dotsContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dot: {
-    backgroundColor: "#4ade80", // green-400 equivalent
+    backgroundColor: '#4ade80', // green-400 equivalent
     borderRadius: 5,
     marginHorizontal: 3,
   },
   text: {
     marginTop: 10,
-    color: "#16a34a", // green-600 equivalent
+    color: '#16a34a', // green-600 equivalent
     fontSize: 14,
   },
 });

@@ -1,13 +1,13 @@
-import { Tabs } from "expo-router";
-import { Image, Text, View } from "react-native";
-import type { ImageSourcePropType } from "react-native";
-import React from "react";
+import { Tabs } from 'expo-router';
+import { Image, Text, View, ColorValue } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
+import React from 'react';
 
-import { icons } from "../../constants";
+import { icons } from '../../constants';
 
 interface TabIconProps {
   icon: ImageSourcePropType;
-  color: string;
+  color: ColorValue;
   name: string;
   focused: boolean;
 }
@@ -22,7 +22,7 @@ const TabIcon = ({ icon, color, name, focused }: TabIconProps) => {
         className="w-6 h-6"
       />
       <Text
-        className={`${focused ? "font-psemibold" : "font-pregular"} text-xs`}
+        className={`${focused ? 'font-psemibold' : 'font-pregular'} text-xs`}
         style={{ color }}
       >
         {name}
@@ -37,23 +37,23 @@ const TabsLayout = () => {
       <Tabs
         screenOptions={{
           tabBarShowLabel: false,
-          tabBarActiveTintColor: "#FFA001",
-          tabBarInactiveTintColor: "#CDCDE0",
+          tabBarActiveTintColor: '#FFA001',
+          tabBarInactiveTintColor: '#CDCDE0',
           tabBarStyle: {
-            backgroundColor: "#161622",
+            backgroundColor: '#161622',
             borderTopWidth: 1,
-            borderTopColor: "#232533",
+            borderTopColor: '#232533',
             height: 84,
             paddingTop: 20,
             paddingInline: 0,
-            width: "100%",
+            width: '100%',
           },
         }}
       >
         <Tabs.Screen
           name="home"
           options={{
-            title: "Home",
+            title: 'Home',
             headerShown: false,
             tabBarIcon: ({ color, focused }) => (
               <TabIcon

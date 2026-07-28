@@ -1,7 +1,8 @@
 ---
 description: Technical guidance, architecture strategy, and engineering best practices advisor
 mode: subagent
-model: opencode-go/kimi-k3
+model: opencode-go/grok-4.5
+reasoningEffort: high
 steps: 12
 temperature: 0.2
 tools:

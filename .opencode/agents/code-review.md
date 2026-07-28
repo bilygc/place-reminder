@@ -1,7 +1,7 @@
 ---
 description: Code quality, security, and performance auditor
 mode: subagent
-model: opencode-go/glm-5.2
+model: opencode-go/qwen3.7-max
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

@@ -1,15 +1,15 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Alert, Linking, Platform } from "react-native";
-import * as Location from "expo-location";
-import useLocation from "@/hooks/useLocation";
-import { LocationCard } from "@/components/CardReminder/CardReminder.location.types";
-import { reminderToRegion } from "@/lib/locationRegion";
+import React, { useEffect, useState, useCallback } from 'react';
+import { Alert, Linking, Platform } from 'react-native';
+import * as Location from 'expo-location';
+import useLocation from '@/hooks/useLocation';
+import { LocationCard } from '@/components/CardReminder/CardReminder.location.types';
+import { reminderToRegion } from '@/lib/locationRegion';
 
 interface LocationReminderManagerProps {
   children: React.ReactNode;
-  onPermissionDenied?: (type: "foreground" | "background") => void;
+  onPermissionDenied?: (type: 'foreground' | 'background') => void;
   onGeofenceEvent?: (
-    eventType: "enter" | "exit",
+    eventType: 'enter' | 'exit',
     reminder: LocationCard
   ) => void;
 }
@@ -31,15 +31,15 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
     const initializeLocation = async () => {
       try {
         // Check permissions
-        if (location.foregroundPermission !== "granted") {
-          onPermissionDenied?.("foreground");
+        if (location.foregroundPermission !== 'granted') {
+          onPermissionDenied?.('foreground');
           Alert.alert(
-            "Location Permission Required",
-            "Place Reminder needs access to your location to trigger reminders when you enter or leave specific places. Please enable location permission in Settings.",
+            'Location Permission Required',
+            'Place Reminder needs access to your location to trigger reminders when you enter or leave specific places. Please enable location permission in Settings.',
             [
-              { text: "Cancel", style: "cancel" },
+              { text: 'Cancel', style: 'cancel' },
               {
-                text: "Open Settings",
+                text: 'Open Settings',
                 onPress: () => Linking.openSettings(),
               },
             ]
@@ -47,19 +47,19 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
           return;
         }
 
-        if (location.backgroundPermission !== "granted") {
-          onPermissionDenied?.("background");
+        if (location.backgroundPermission !== 'granted') {
+          onPermissionDenied?.('background');
           const bgMessage =
-            Platform.OS === "android"
-              ? "Place Reminder needs background location access to notify you when you enter or leave reminder locations. On Android 11+, open Settings and choose \"Allow all the time\" for background location."
-              : "Place Reminder needs background location access to notify you when you enter or leave reminder locations. Please enable \"Always\" under Location in Settings.";
+            Platform.OS === 'android'
+              ? 'Place Reminder needs background location access to notify you when you enter or leave reminder locations. On Android 11+, open Settings and choose "Allow all the time" for background location.'
+              : 'Place Reminder needs background location access to notify you when you enter or leave reminder locations. Please enable "Always" under Location in Settings.';
           Alert.alert(
-            "Background Location Permission Required",
+            'Background Location Permission Required',
             bgMessage,
             [
-              { text: "Cancel", style: "cancel" },
+              { text: 'Cancel', style: 'cancel' },
               {
-                text: "Open Settings",
+                text: 'Open Settings',
                 onPress: () => Linking.openSettings(),
               },
             ]
@@ -76,10 +76,10 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
           const reminder = reminders.find((r) => r.$id === region.identifier);
           if (reminder) {
             // Convert expo-location event type to our app's event type
-            const appEventType: "enter" | "exit" =
+            const appEventType: 'enter' | 'exit' =
               eventType === Location.GeofencingEventType.Enter
-                ? "enter"
-                : "exit";
+                ? 'enter'
+                : 'exit';
 
             // Call the onGeofenceEvent callback
             onGeofenceEvent?.(appEventType, reminder);
@@ -94,10 +94,10 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
               // In a real app, you would use expo-notifications here
               Alert.alert(
                 `Reminder: ${reminder.do}`,
-                `You are ${appEventType === "enter" ? "at" : "leaving"} ${
+                `You are ${appEventType === 'enter' ? 'at' : 'leaving'} ${
                   reminder.at
                 }`,
-                [{ text: "OK" }]
+                [{ text: 'OK' }]
               );
             }
           }
@@ -105,11 +105,11 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
 
         setInitialized(true);
       } catch (error) {
-        console.error("Error initializing location tracking:", error);
+        console.error('Error initializing location tracking:', error);
         Alert.alert(
-          "Location Error",
-          "There was an error initializing location tracking. Please try again.",
-          [{ text: "OK" }]
+          'Location Error',
+          'There was an error initializing location tracking. Please try again.',
+          [{ text: 'OK' }]
         );
       }
     };
@@ -155,7 +155,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
 
         return false;
       } catch (error) {
-        console.error("Error adding location reminder:", error);
+        console.error('Error adding location reminder:', error);
         return false;
       }
     },
@@ -177,7 +177,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
 
         return false;
       } catch (error) {
-        console.error("Error removing location reminder:", error);
+        console.error('Error removing location reminder:', error);
         return false;
       }
     },
@@ -206,7 +206,7 @@ const LocationReminderManager: React.FC<LocationReminderManagerProps> = ({
 
         return false;
       } catch (error) {
-        console.error("Error updating location reminder:", error);
+        console.error('Error updating location reminder:', error);
         return false;
       }
     },

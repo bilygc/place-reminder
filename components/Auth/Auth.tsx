@@ -1,7 +1,7 @@
-import React, { useEffect } from "react";
-import { getCurrentUser } from "@/lib/appwrite";
-import { observer } from "mobx-react-lite";
-import { User, UserContext } from "@/store/user";
+import React, { useEffect } from 'react';
+import { getCurrentUser } from '@/lib/appwrite';
+import { observer } from 'mobx-react-lite';
+import { User, UserContext } from '@/store/user';
 
 const Auth = observer(({ children }: React.PropsWithChildren<{}>) => {
   const user = new User();

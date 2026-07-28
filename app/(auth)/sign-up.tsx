@@ -1,21 +1,21 @@
-import { observer } from "mobx-react-lite";
-import { View, Text, ScrollView } from "react-native";
-import { Link, router } from "expo-router";
-import React, { useEffect, useState, useContext } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { images } from "@/constants";
-import ensureError from "@/utils/ensureError";
+import { observer } from 'mobx-react-lite';
+import { View, Text, ScrollView } from 'react-native';
+import { Link, router } from 'expo-router';
+import React, { useEffect, useState, useContext } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { images } from '@/constants';
+import ensureError from '@/utils/ensureError';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
   withDelay,
-} from "react-native-reanimated";
-import { FormField } from "@/components/FormField";
-import CustomButton from "@/components/CustomButton";
-import { createUser } from "@/lib/appwrite";
-import { UserContext } from "@/store/user";
+} from 'react-native-reanimated';
+import { FormField } from '@/components/FormField';
+import CustomButton from '@/components/CustomButton';
+import { createUser } from '@/lib/appwrite';
+import { UserContext } from '@/store/user';
 
 interface FormProps {
   username: string;
@@ -27,23 +27,23 @@ interface FormProps {
 const SignUp = observer(() => {
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState<FormProps>({
-    username: "",
-    email: "",
-    password: "",
-    pwdConfirm: "",
+    username: '',
+    email: '',
+    password: '',
+    pwdConfirm: '',
   });
 
   const user = useContext(UserContext);
 
   const submit = async () => {
     if (!form.email || !form.password || !form.username) {
-      alert("Please fill all fields");
+      alert('Please fill all fields');
       return;
     }
 
     const emailRegex = /^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(form.email)) {
-      alert("Please enter a valid email address");
+      alert('Please enter a valid email address');
       return;
     }
 
@@ -51,13 +51,13 @@ const SignUp = observer(() => {
 
     if (!passwordRegex.test(form.password)) {
       alert(
-        "Password must be at least 6 characters long and contain at least one capital letter and one number"
+        'Password must be at least 6 characters long and contain at least one capital letter and one number'
       );
       return;
     }
 
     if (form.password !== form.pwdConfirm) {
-      alert("Passwords do not match");
+      alert('Passwords do not match');
       return;
     }
     setIsLoading(true);
@@ -77,7 +77,7 @@ const SignUp = observer(() => {
         userName: form.username,
         avatar: userDocument.avatar,
       });
-      router.replace("/home");
+      router.replace('/home');
     } catch (error: unknown) {
       const err = ensureError(error);
       console.error(err.message);
@@ -102,7 +102,7 @@ const SignUp = observer(() => {
       withTiming(360, { duration: 2000 }),
       withDelay(1000, withTiming(360, { duration: 2000 }))
     );
-  }, []);
+  }, [opacity, rotate, scale]);
 
   const { AppLogo } = images;
 
@@ -144,21 +144,21 @@ const SignUp = observer(() => {
             title="Username"
             value={form.username}
             handleChangeText={(text: string) =>
-              handleFormChange("username", text)
+              handleFormChange('username', text)
             }
           />
           <FormField
             otherStyles="mt-4"
             title="Email"
             value={form.email}
-            handleChangeText={(text: string) => handleFormChange("email", text)}
+            handleChangeText={(text: string) => handleFormChange('email', text)}
           />
           <FormField
             otherStyles="mt-4"
             title="Password"
             value={form.password}
             handleChangeText={(text: string) =>
-              handleFormChange("password", text)
+              handleFormChange('password', text)
             }
           />
           <FormField
@@ -166,7 +166,7 @@ const SignUp = observer(() => {
             title="Confirm password"
             value={form.pwdConfirm}
             handleChangeText={(text: string) =>
-              handleFormChange("pwdConfirm", text)
+              handleFormChange('pwdConfirm', text)
             }
           />
           <Link
@@ -184,7 +184,7 @@ const SignUp = observer(() => {
             />
           </View>
           <Text className="text-green-50 mt-5 text-center font-inmedium">
-            Already have an account?{" "}
+            Already have an account?{' '}
             <Link href="/sign-in" className="text-secondary font-inbold">
               Login
             </Link>
