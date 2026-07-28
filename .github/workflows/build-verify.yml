@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -107,9 +107,28 @@ jobs:
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          df -h
+          
+      - name: Clean Gradle cache
+        working-directory: android
+        run: ./gradlew --stop && rm -rf ~/.gradle/caches/ .gradle/
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
+      
+      - name: Free up disk space before emulator
+        run: |
+          df -h
+          sudo rm -rf ~/.gradle/caches/
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          df -h
 
       - name: Run on Android Emulator & capture logcat
         uses: reactivecircus/android-emulator-runner@v2
@@ -117,8 +136,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          profile: pixel_6
           disable-animations: true
+          ram-size: 2048
           script: |
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -126,12 +145,7 @@ jobs:
             sleep 25
             adb logcat -d > logcat_output.txt
             echo "--- Checking for fatal errors / crashes ---"
-            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Appwrite.*Exception" logcat_output.txt; then
-              echo "::error::Fatal runtime error detected on emulator boot. See logcat_output.txt"
-              exit 1
-            else
-              echo "No fatal exceptions detected during smoke boot."
-            fi
+            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Appwrite.*Exception" logcat_output.txt; then echo "::error::Fatal runtime error detected on emulator boot. See logcat_output.txt" && exit 1; else echo "No fatal exceptions detected during smoke boot."; fi
 
       - name: Upload logcat on failure
         if: failure()

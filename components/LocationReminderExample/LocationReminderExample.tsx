@@ -3,6 +3,11 @@ import { View, Text, Alert, TouchableOpacity, TextInput, StyleSheet } from 'reac
 import { useLocationReminders } from '@/components/LocationReminderManager/LocationReminderManager';
 import { LocationCard } from '@/components/CardReminder/CardReminder.location.types';
 import CardReminder from '@/components/CardReminder/CardReminder';
+import {
+  validateRadius,
+  RADIUS_MIN_METERS,
+  RADIUS_MAX_METERS,
+} from '@/utils/validateRadius';
 
 /**
  * Example component demonstrating how to use location-based reminders
@@ -43,6 +48,38 @@ const LocationReminderExample: React.FC = () => {
       return;
     }
 
+    // Validate the radius before creating the reminder. The previous
+    // `parseInt(radius, 10) || 100` silently mangled invalid input
+    // (e.g. "100abc" became 100, "12.9" became 12); this surfaces a
+    // clear error instead.
+    const radiusResult = validateRadius(radius);
+    if (!radiusResult.valid) {
+      switch (radiusResult.reason) {
+      case 'empty':
+        Alert.alert('Empty Radius', 'Please enter a radius in meters.');
+        break;
+      case 'not-a-number':
+        Alert.alert(
+          'Invalid Radius',
+          'Please enter a whole number of meters (e.g. 100).'
+        );
+        break;
+      case 'too-small':
+        Alert.alert(
+          'Radius Too Small',
+          `Radius must be at least ${RADIUS_MIN_METERS} meters.`
+        );
+        break;
+      case 'too-large':
+        Alert.alert(
+          'Radius Too Large',
+          `Radius must be at most ${RADIUS_MAX_METERS} meters.`
+        );
+        break;
+      }
+      return;
+    }
+
     // Create a new reminder
     const newReminder: LocationCard = {
       $id: `reminder-${Date.now()}`, // Generate a unique ID
@@ -51,7 +88,7 @@ const LocationReminderExample: React.FC = () => {
       active: true,
       latitude: currentLocation.coords.latitude,
       longitude: currentLocation.coords.longitude,
-      radius: parseInt(radius, 10) || 100,
+      radius: radiusResult.value,
       notifyOnEnter: true,
       notifyOnExit: false,
     };
