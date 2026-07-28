@@ -122,6 +122,14 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
+      
+      - name: Free up disk space before emulator
+        run: |
+          df -h
+          sudo rm -rf ~/.gradle/caches/
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /opt/hostedtoolcache
+          df -h
 
       - name: Run on Android Emulator & capture logcat
         uses: reactivecircus/android-emulator-runner@v2
@@ -129,8 +137,9 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: nexus_6
           disable-animations: true
+          ram-size: 2048
           script: |
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
