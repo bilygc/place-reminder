@@ -1,7 +1,7 @@
 ---
 description: Test quality validation via mutation testing analysis
 mode: subagent
-model: opencode-go/glm-5.2
+model: opencode-go/kimi-k2.7-code
 temperature: 0.1
 steps: 10
 tools:

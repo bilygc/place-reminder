@@ -1,7 +1,7 @@
 ---
 description: UI/UX design and frontend development specialist
 mode: subagent
-model: opencode-go/glm-5.2
+model: opencode-go/qwen3.7-max
 temperature: 0.2
 steps: 12
 tools:

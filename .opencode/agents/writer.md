@@ -1,7 +1,7 @@
 ---
 description: Technical documentation author for READMEs, API docs, and guides
 mode: subagent
-model: opencode-go/deepseek-v4-pro
+model: opencode-go/deepseek-v4-flash
 temperature: 0.3
 steps: 10
 tools:
