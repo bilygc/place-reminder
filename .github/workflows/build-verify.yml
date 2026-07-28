@@ -145,12 +145,7 @@ jobs:
             sleep 25
             adb logcat -d > logcat_output.txt
             echo "--- Checking for fatal errors / crashes ---"
-            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Appwrite.*Exception" logcat_output.txt; then
-              echo "::error::Fatal runtime error detected on emulator boot. See logcat_output.txt"
-              exit 1
-            else
-              echo "No fatal exceptions detected during smoke boot."
-            fi
+            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Appwrite.*Exception" logcat_output.txt; then echo "::error::Fatal runtime error detected on emulator boot. See logcat_output.txt" && exit 1; else echo "No fatal exceptions detected during smoke boot."; fi
 
       - name: Upload logcat on failure
         if: failure()
