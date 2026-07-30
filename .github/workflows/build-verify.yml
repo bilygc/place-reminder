@@ -95,6 +95,20 @@ jobs:
         env:
           EXPO_PUBLIC_PLATFORM: ${{ secrets.EXPO_PUBLIC_PLATFORM }}
 
+      - name: Free up disk space (pre-build)
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          # NOTE: do NOT wipe /opt/hostedtoolcache wholesale — it's where
+          # actions/setup-java and actions/setup-node install their
+          # runtimes, which this workflow needs later. Only remove
+          # specific subfolders we know we don't use.
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /opt/hostedtoolcache/go
+          sudo rm -rf /opt/hostedtoolcache/PyPy
+          df -h
+
       - name: Prebuild Android project
         run: npx expo prebuild --platform android --clean
 
@@ -110,12 +124,23 @@ jobs:
       - name: Build debug APK (with embedded JS bundle)
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace -PreactNativeArchitectures=x86_64
-        env:
-          # Force JS bundling into the debug APK. By default React Native
-          # skips this in debug builds and expects a live Metro server —
-          # which doesn't exist in CI. Without this, the app installs fine
-          # but crashes on launch with "Unable to load script."
-          ORG_GRADLE_PROJECT_expo_useLegacyPackaging: "false"
+        # No special env vars needed here — the withForceDebugBundle config
+        # plugin (plugins/withForceDebugBundle.js, applied during
+        # `expo prebuild`) already sets debuggableVariants = [] in
+        # build.gradle, forcing the JS bundle to be embedded in the debug
+        # APK. Confirmed locally: assets/index.android.bundle is present
+        # in the built APK.
+
+      - name: Free up disk space (post-build, pre-emulator)
+        run: |
+          df -h
+          # Safe to remove: Gradle's own cache (already consumed for this
+          # build) and the NDK (not needed for the emulator step). Do NOT
+          # touch /opt/hostedtoolcache — Java/Node runtimes live there and
+          # the emulator runner action depends on them.
+          sudo rm -rf ~/.gradle/caches/
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          df -h
 
       - name: Run on Android Emulator & capture logcat
         uses: reactivecircus/android-emulator-runner@v2
@@ -123,6 +148,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
+          profile: Nexus 6
+          ram-size: 2048M
           disable-animations: true
           script: |
             adb logcat -c
