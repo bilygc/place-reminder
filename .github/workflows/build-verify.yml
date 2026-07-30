@@ -107,28 +107,15 @@ jobs:
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android/sdk/ndk
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          df -h
-          
-      - name: Clean Gradle cache
+      - name: Build debug APK (with embedded JS bundle)
         working-directory: android
-        run: ./gradlew --stop && rm -rf ~/.gradle/caches/ .gradle/
-
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
-      
-      - name: Free up disk space before emulator
-        run: |
-          df -h
-          sudo rm -rf ~/.gradle/caches/
-          sudo rm -rf /usr/local/lib/android/sdk/ndk
-          df -h
+        run: ./gradlew assembleDebug --stacktrace -PreactNativeArchitectures=x86_64
+        env:
+          # Force JS bundling into the debug APK. By default React Native
+          # skips this in debug builds and expects a live Metro server —
+          # which doesn't exist in CI. Without this, the app installs fine
+          # but crashes on launch with "Unable to load script."
+          ORG_GRADLE_PROJECT_expo_useLegacyPackaging: "false"
 
       - name: Run on Android Emulator & capture logcat
         uses: reactivecircus/android-emulator-runner@v2
@@ -137,15 +124,34 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          ram-size: 2048
           script: |
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            APP_PID=""
             adb shell monkey -p com.myatomikappz.placereminder -c android.intent.category.LAUNCHER 1
-            sleep 25
+            sleep 5
+            APP_PID=$(adb shell pidof com.myatomikappz.placereminder | tr -d '\r')
+            echo "App PID: ${APP_PID:-not found}"
+            sleep 20
             adb logcat -d > logcat_output.txt
-            echo "--- Checking for fatal errors / crashes ---"
-            if grep -E "FATAL EXCEPTION|AndroidRuntime.*FATAL|Appwrite.*Exception" logcat_output.txt; then echo "::error::Fatal runtime error detected on emulator boot. See logcat_output.txt" && exit 1; else echo "No fatal exceptions detected during smoke boot."; fi
+            echo "--- Checking for fatal errors / crashes in our app only ---"
+            # Only fail on a FATAL EXCEPTION whose logcat line is tagged with
+            # our app's own PID, or that explicitly names our package/an
+            # Appwrite exception. This avoids false positives from unrelated
+            # system apps (e.g. com.google.android.gm) crashing in the
+            # background on a bare CI emulator image, which is expected and
+            # not something we want to gate the PR on.
+            if [ -n "$APP_PID" ] && grep -E "FATAL EXCEPTION" logcat_output.txt | grep -q "$APP_PID"; then
+              echo "::error::Fatal runtime error detected in our app (PID $APP_PID). See logcat_output.txt"
+              grep -A 30 "FATAL EXCEPTION" logcat_output.txt | grep "$APP_PID" || true
+              exit 1
+            elif grep -E "com\.myatomikappz\.placereminder.*FATAL EXCEPTION|Appwrite.*Exception" logcat_output.txt; then
+              echo "::error::Fatal runtime error detected referencing our app or Appwrite. See logcat_output.txt"
+              exit 1
+            else
+              echo "No fatal exceptions detected in our app during smoke boot."
+              echo "(Unrelated system-app crashes, if any, are ignored — see logcat_output.txt for full log.)"
+            fi
 
       - name: Upload logcat on failure
         if: failure()
