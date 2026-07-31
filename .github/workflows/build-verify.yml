@@ -155,16 +155,17 @@ jobs:
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell monkey -p com.myatomikappz.placereminder -c android.intent.category.LAUNCHER 1
-            sleep 8
-            APP_PID=$(adb shell pidof com.myatomikappz.placereminder | tr -d '\r')
-            echo "App PID after launch: ${APP_PID:-not found}"
-            sleep 15
+            for i in 1 2 3 4 5; do
+              sleep 4
+              APP_PID=$(adb shell pidof com.myatomikappz.placereminder | tr -d '\r')
+              echo "Check $i (t=$((i*4))s): App PID = ${APP_PID:-not found}"
+            done
             adb logcat -d > logcat_output.txt
             echo "--- Full logcat saved to logcat_output.txt ---"
             echo "--- Searching for any FATAL EXCEPTION mentioning our package ---"
             grep -B 2 -A 40 "FATAL EXCEPTION" logcat_output.txt | grep -B 42 "com.myatomikappz.placereminder" || echo "No FATAL EXCEPTION block mentions our package."
-            echo "--- Searching for ActivityManager launch/crash records for our package ---"
-            grep "com.myatomikappz.placereminder" logcat_output.txt | grep -E "ActivityManager|AndroidRuntime|Process" || echo "No ActivityManager/Process lines found for our package."
+            echo "--- Full ActivityManager/AndroidRuntime/Process trail for our package ---"
+            grep "com.myatomikappz.placereminder" logcat_output.txt | grep -E "ActivityManager|AndroidRuntime|Process|Died|died" || echo "No relevant lines found for our package."
 
       - name: Upload logcat (always, for diagnosis)
         if: always()
