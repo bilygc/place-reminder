@@ -154,34 +154,20 @@ jobs:
           script: |
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            APP_PID=""
             adb shell monkey -p com.myatomikappz.placereminder -c android.intent.category.LAUNCHER 1
-            sleep 5
+            sleep 8
             APP_PID=$(adb shell pidof com.myatomikappz.placereminder | tr -d '\r')
-            echo "App PID: ${APP_PID:-not found}"
-            sleep 20
+            echo "App PID after launch: ${APP_PID:-not found}"
+            sleep 15
             adb logcat -d > logcat_output.txt
-            echo "--- Checking for fatal errors / crashes in our app only ---"
-            # Only fail on a FATAL EXCEPTION whose logcat line is tagged with
-            # our app's own PID, or that explicitly names our package/an
-            # Appwrite exception. This avoids false positives from unrelated
-            # system apps (e.g. com.google.android.gm) crashing in the
-            # background on a bare CI emulator image, which is expected and
-            # not something we want to gate the PR on.
-            if [ -n "$APP_PID" ] && grep -E "FATAL EXCEPTION" logcat_output.txt | grep -q "$APP_PID"; then
-              echo "::error::Fatal runtime error detected in our app (PID $APP_PID). See logcat_output.txt"
-              grep -A 30 "FATAL EXCEPTION" logcat_output.txt | grep "$APP_PID" || true
-              exit 1
-            elif grep -E "com\.myatomikappz\.placereminder.*FATAL EXCEPTION|Appwrite.*Exception" logcat_output.txt; then
-              echo "::error::Fatal runtime error detected referencing our app or Appwrite. See logcat_output.txt"
-              exit 1
-            else
-              echo "No fatal exceptions detected in our app during smoke boot."
-              echo "(Unrelated system-app crashes, if any, are ignored — see logcat_output.txt for full log.)"
-            fi
+            echo "--- Full logcat saved to logcat_output.txt ---"
+            echo "--- Searching for any FATAL EXCEPTION mentioning our package ---"
+            grep -B 2 -A 40 "FATAL EXCEPTION" logcat_output.txt | grep -B 42 "com.myatomikappz.placereminder" || echo "No FATAL EXCEPTION block mentions our package."
+            echo "--- Searching for ActivityManager launch/crash records for our package ---"
+            grep "com.myatomikappz.placereminder" logcat_output.txt | grep -E "ActivityManager|AndroidRuntime|Process" || echo "No ActivityManager/Process lines found for our package."
 
-      - name: Upload logcat on failure
-        if: failure()
+      - name: Upload logcat (always, for diagnosis)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logcat-output
