@@ -155,17 +155,22 @@ jobs:
             adb logcat -c
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell monkey -p com.myatomikappz.placereminder -c android.intent.category.LAUNCHER 1
-            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid1.txt; echo "Check 1 (t=4s): PID = $(cat /tmp/pid1.txt || echo 'not found')"
-            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid2.txt; echo "Check 2 (t=8s): PID = $(cat /tmp/pid2.txt || echo 'not found')"
-            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid3.txt; echo "Check 3 (t=12s): PID = $(cat /tmp/pid3.txt || echo 'not found')"
-            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid4.txt; echo "Check 4 (t=16s): PID = $(cat /tmp/pid4.txt || echo 'not found')"
-            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid5.txt; echo "Check 5 (t=20s): PID = $(cat /tmp/pid5.txt || echo 'not found')"
+            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid1.txt
+            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid2.txt
+            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid3.txt
+            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pid4.txt
+            sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pidfinal.txt
+            echo "Final app PID check: $(cat /tmp/pidfinal.txt)"
             adb logcat -d > logcat_output.txt
-            echo "--- Full logcat saved to logcat_output.txt ---"
-            echo "--- Searching for any FATAL EXCEPTION mentioning our package ---"
-            grep -B 2 -A 40 "FATAL EXCEPTION" logcat_output.txt | grep -B 42 "com.myatomikappz.placereminder" || echo "No FATAL EXCEPTION block mentions our package."
-            echo "--- Full ActivityManager/AndroidRuntime/Process trail for our package ---"
-            grep "com.myatomikappz.placereminder" logcat_output.txt | grep -E "ActivityManager|AndroidRuntime|Process|Died|died" || echo "No relevant lines found for our package."
+            echo "--- Checking for fatal errors in OUR app only (grep exit code drives pass/fail) ---"
+            ! grep -q "com.myatomikappz.placereminder.*FATAL EXCEPTION\|Appwrite.*Exception" logcat_output.txt
+            NO_APP_FATAL=$?
+            test -s /tmp/pidfinal.txt
+            APP_STILL_ALIVE=$?
+            echo "No fatal exception referencing our app: $([ $NO_APP_FATAL -eq 0 ] && echo PASS || echo FAIL)"
+            echo "App process still alive after 20s: $([ $APP_STILL_ALIVE -eq 0 ] && echo PASS || echo FAIL)"
+            test $NO_APP_FATAL -eq 0
+            test $APP_STILL_ALIVE -eq 0
 
       - name: Upload logcat (always, for diagnosis)
         if: always()
