@@ -162,15 +162,9 @@ jobs:
             sleep 4 && adb shell pidof com.myatomikappz.placereminder | tr -d '\r' > /tmp/pidfinal.txt
             echo "Final app PID check: $(cat /tmp/pidfinal.txt)"
             adb logcat -d > logcat_output.txt
-            echo "--- Checking for fatal errors in OUR app only (grep exit code drives pass/fail) ---"
-            ! grep -q "com.myatomikappz.placereminder.*FATAL EXCEPTION\|Appwrite.*Exception" logcat_output.txt
-            NO_APP_FATAL=$?
-            test -s /tmp/pidfinal.txt
-            APP_STILL_ALIVE=$?
-            echo "No fatal exception referencing our app: $([ $NO_APP_FATAL -eq 0 ] && echo PASS || echo FAIL)"
-            echo "App process still alive after 20s: $([ $APP_STILL_ALIVE -eq 0 ] && echo PASS || echo FAIL)"
-            test $NO_APP_FATAL -eq 0
-            test $APP_STILL_ALIVE -eq 0
+            echo "--- Checking for fatal errors in OUR app only ---"
+            if grep -q "com.myatomikappz.placereminder.*FATAL EXCEPTION\|Appwrite.*Exception" logcat_output.txt; then echo "::error::Fatal exception found in logcat" && exit 1; else echo "PASS: No fatal exceptions"; fi
+            if [ ! -s /tmp/pidfinal.txt ]; then echo "::error::App process died before 20s" && exit 1; else echo "PASS: App still alive"; fi
 
       - name: Upload logcat (always, for diagnosis)
         if: always()
