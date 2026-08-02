@@ -140,6 +140,100 @@ Before writing any code, answer these questions by reading the codebase:
 - **No architecture decisions**: If the task requires significant design choices, flag `oracle` for guidance before proceeding.
 - **No external research**: If you need to understand a library's API, flag `librarian`.
 
+## Playbook: `expo-doctor` failures from build-verify
+
+If a task arrives from `build-verify`'s Stage 3.5 failure report and it
+includes `expo-doctor: FAIL`, this is **not** a typecheck/lint/logic bug —
+it's a native dependency duplication or version-mismatch issue, and it
+needs a different fix strategy than a normal code change. Do not start
+the standard TDD workflow above for this class of failure; follow this
+playbook instead.
+
+### Symptom class
+
+`expo-doctor` fails in one of two ways:
+
+1. **Duplicate native module** — the report lists the same package at two
+   versions, e.g.:
+   ```
+   Found duplicates for react-native:
+     ├─ react-native@0.86.0 (at: node_modules\react-native)
+     └─ react-native@0.73.11 (at: node_modules\react-native-appwrite\node_modules\react-native)
+   ```
+   This means a transitive dependency (often a third-party SDK) pins its
+   own copy of a native module instead of declaring it as a peer
+   dependency, so npm installs two copies side by side. At runtime this
+   can produce `TurboModuleRegistry.getEnforcing(...) could not be found`
+   errors (bridgeless mode failing to register core native modules) —
+   invisible to `tsc`/`eslint`/`jest`, only caught here.
+
+2. **Version mismatch** — the report lists packages below/above the
+   version the installed Expo SDK expects. Usually lower severity; often
+   safe to defer, but check whether the mismatched package is involved in
+   the failing behavior before ignoring it.
+
+### Fix strategy for duplicates (do this, not a code change)
+
+1. Identify which dependency is pinning its own copy:
+   ```bash
+   npm ls <package-name>
+   ```
+   Look for a nested `node_modules/<owning-package>/node_modules/<duplicated-package>`
+   entry instead of `<duplicated-package> deduped`.
+
+2. Check if the owning package declares the duplicated one as a peer
+   dependency:
+   ```bash
+   npm view <owning-package> peerDependencies
+   ```
+   If it does NOT (i.e. it's a direct/hard dependency), npm won't dedupe
+   it automatically — that's the root cause.
+
+3. Add a root-level `overrides` entry in `package.json` to force
+   resolution to the project's version:
+   ```json
+   {
+     "overrides": {
+       "<owning-package>": {
+         "<duplicated-package>": "$<duplicated-package>"
+       }
+     }
+   }
+   ```
+   The `$<duplicated-package>` syntax pins it to whatever version is
+   already declared at the project root — no need to hardcode a version
+   string.
+
+4. Reinstall clean and re-verify:
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install --legacy-peer-deps
+   npx expo-doctor
+   ```
+
+5. **Do not** attempt to fix this by editing application code, changing
+   imports, or downgrading the project's own `react-native`/`expo`
+   version — the fix belongs in dependency resolution (`overrides`), not
+   in source files.
+
+### Known precedent in this repo
+
+`react-native-appwrite@0.5.0` pins `react-native@0.73.11` as a direct
+dependency (peer deps only declare `expo: '*'`). Root-caused 2026-08 after
+this produced a `PlatformConstants could not be found` crash on every app
+launch in a real emulator run — `expo-doctor` was added to
+`build-verify.sh` specifically to catch this class of bug before it
+reaches a human. If you see this exact duplicate again, the `overrides`
+entry for `react-native-appwrite` → `react-native` should already be in
+`package.json`; if it's missing, that's the fix.
+
+### After fixing
+
+Report back with a plain "dependency override applied, re-run" — no need
+to re-explain the general strategy each time in your Summary section;
+this playbook is the reference. `build-verify` will re-run automatically
+per the orchestrator's Stage 3.5 retry loop.
+
 ## Escalation
 
 | Situation | Action |
@@ -148,3 +242,4 @@ Before writing any code, answer these questions by reading the codebase:
 | External library unknown | Note it, recommend `librarian` |
 | Refactor reveals larger issue | Note it, implement only what was asked, surface the finding |
 | Diagnostics fail after changes | Debug and fix before reporting complete |
+| `build-verify` reports `expo-doctor: FAIL` | Follow the playbook above, not the standard TDD workflow |
