@@ -10,6 +10,7 @@ import {
 } from 'react-native-appwrite';
 
 import ensureError from '@/utils/ensureError';
+import { validateEmail } from '@/utils/validateEmail';
 
 import type {
   CreateUserFunction,
@@ -75,10 +76,20 @@ export const createUser: CreateUserFunction = async (
   password,
   username
 ) => {
+
+  const emailResult = validateEmail(email);
+  if (!emailResult.valid) {
+    throw new Error(`Invalid email: ${emailResult.reason}`);
+  }
+
+  if (!password || password.trim() === '') {
+    throw new Error('Invalid password: password is required');
+  }
+
   try {
     const newAccount = await account.create(
       ID.unique(),
-      email,
+      emailResult.value,
       password,
       username
     );
@@ -88,7 +99,7 @@ export const createUser: CreateUserFunction = async (
 
     const avatarUrl = avatars.getInitials(username);
 
-    await signIn(email, password);
+    await signIn(emailResult.value, password);
 
     const newUser = await database.createDocument(
       config.databaseId,
@@ -96,7 +107,7 @@ export const createUser: CreateUserFunction = async (
       ID.unique(),
       {
         accountid: newAccount.$id,
-        email,
+        email: emailResult.value,
         username,
         avatar: avatarUrl,
       }
@@ -110,8 +121,20 @@ export const createUser: CreateUserFunction = async (
   }
 };
 export const signIn: SignInFunction = async (email, password) => {
+  const emailResult = validateEmail(email);
+  if (!emailResult.valid) {
+    throw new Error(`Invalid email: ${emailResult.reason}`);
+  }
+
+  if (!password || password.trim() === '') {
+    throw new Error('Invalid password: password is required');
+  }
+
   try {
-    const session = await account.createEmailPasswordSession(email, password);
+    const session = await account.createEmailPasswordSession(
+      emailResult.value,
+      password
+    );
 
     return session;
   } catch (error: unknown) {

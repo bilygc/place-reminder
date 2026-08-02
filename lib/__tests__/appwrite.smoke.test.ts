@@ -1,15 +1,24 @@
 /**
  * Appwrite smoke test.
  *
- * Two layers:
+ * Three layers:
  * 1. Config validation (always runs, no network) — catches the silent
  *    empty-string fallback bug that only used to explode at runtime.
  * 2. Live ping (runs only if EXPO_PUBLIC_* env vars are present, e.g. in CI
  *    with GitHub Secrets configured) — catches wrong/expired credentials,
  *    unreachable endpoint, or a misconfigured project/platform.
+ * 3. Auth input validation (always runs, no network) — catches the class
+ *    of bug where signIn()/createUser() are called with malformed input
+ *    (bad email, empty password) and the resulting error is swallowed or
+ *    surfaces only as an unhandled "Invalid `email` param" deep in an
+ *    Appwrite SDK call, invisible to typecheck/lint/build. Root-caused
+ *    2026-08: an emulator test run passed a non-email string to signIn()
+ *    and the failure was only visible as a runtime console.error, with
+ *    no test in this suite catching it beforehand.
  *
  * If env vars are missing, layer 2 is SKIPPED (not failed) so this test
- * suite doesn't break for contributors without a .env file.
+ * suite doesn't break for contributors without a .env file. Layer 3 needs
+ * no env vars and no network, so it always runs.
  */
 import { Client, Account } from 'react-native-appwrite';
 
@@ -111,4 +120,93 @@ describe('Appwrite live ping (layer 2: real network call)', () => {
       );
     });
   }
+});
+
+describe('Appwrite auth input validation (layer 3: no network, no credentials)', () => {
+  // Root cause (2026-08): signIn() forwarded email/password straight to
+  // account.createEmailPasswordSession() with no validation of its own.
+  // In production this surfaced as an unhandled Appwrite SDK error
+  // ("Invalid `email` param: Value must be a valid email address") thrown
+  // from deep inside the network call. Under Jest, react-native-appwrite
+  // resolves through whatever mock/transform is configured for the RN
+  // native layer, so asserting against the SDK's own validation behavior
+  // here is not reliable — it can silently resolve instead of throwing.
+  //
+  // The actual fix is for signIn() to validate with the project's own
+  // utils/validateEmail() *before* calling into the SDK at all. These
+  // tests assert that local validation, so they need no env vars, no
+  // network, and no dependency on how react-native-appwrite behaves
+  // under test.
+
+  it('signIn rejects a malformed email before touching Appwrite', async () => {
+    const { signIn } = require('../appwrite');
+    await expect(signIn('not-an-email', 'some-password')).rejects.toThrow(
+      /email/i
+    );
+  });
+
+  it('signIn rejects an empty email', async () => {
+    const { signIn } = require('../appwrite');
+    await expect(signIn('', 'some-password')).rejects.toThrow(/email/i);
+  });
+
+  it('signIn rejects an empty password', async () => {
+    const { signIn } = require('../appwrite');
+    await expect(signIn('valid@example.com', '')).rejects.toThrow(
+      /password/i
+    );
+  });
+
+  it('signIn does not reject a well-formed email on the email-format check', async () => {
+    // We deliberately don't assert success/failure of the overall call —
+    // under Jest, react-native-appwrite is not exercised against a real
+    // network, so whether the SDK call resolves or rejects here says
+    // nothing about our own validation. We only assert that IF it
+    // rejects, the rejection is not our own email-format error. That's
+    // the one thing this layer is responsible for.
+    const { signIn } = require('../appwrite');
+    try {
+      await signIn('valid@example.com', 'some-password');
+      // Resolved (e.g. mocked SDK) — validation was not the blocker. Pass.
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).not.toMatch(/invalid email/i);
+    }
+  });
+
+  it('createUser rejects a malformed email before touching Appwrite', async () => {
+    const { createUser } = require('../appwrite');
+    await expect(createUser('not-an-email', 'some-password')).rejects.toThrow(
+      /email/i
+    );
+  });
+
+  it('createUser rejects an empty email', async () => {
+    const { createUser } = require('../appwrite');
+    await expect(createUser('', 'some-password')).rejects.toThrow(/email/i);
+  });
+
+  it('createUser rejects an empty password', async () => {
+    const { createUser } = require('../appwrite');
+    await expect(createUser('valid@example.com', '')).rejects.toThrow(
+      /password/i
+    );
+  });
+
+  it('createUser does not reject a well-formed email on the email-format check', async () => {
+    // We deliberately don't assert success/failure of the overall call —
+    // under Jest, react-native-appwrite is not exercised against a real
+    // network, so whether the SDK call resolves or rejects here says
+    // nothing about our own validation. We only assert that IF it
+    // rejects, the rejection is not our own email-format error. That's
+    // the one thing this layer is responsible for.
+    const { createUser } = require('../appwrite');
+    try {
+      await createUser('valid@example.com', 'some-password');
+      // Resolved (e.g. mocked SDK) — validation was not the blocker. Pass.
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).not.toMatch(/invalid email/i);
+    }
+  });
 });

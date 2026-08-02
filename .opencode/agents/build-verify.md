@@ -52,10 +52,13 @@ narrow, not the permission block by itself.
 ## What the script checks (for your own understanding — you don't invoke these directly)
 
 1. **Typecheck** — `npx tsc --noEmit`
-2. **Lint** — `npm run lint`
-3. **Tests** — `npm run test -- --ci`, including the Appwrite smoke test
+2. **Dependency health** — `npx expo-doctor` (catches native module
+   duplication and Expo SDK version mismatches invisible to tsc/eslint/jest)
+3. **Lint** — `npm run lint`
+4. **Tests** — `npm run test -- --ci`, including the Appwrite smoke test
    (env var presence, `EXPO_PUBLIC_PLATFORM` vs `app.json` package match,
-   client init, and a live ping to Appwrite when credentials are present).
+   client init, a live ping to Appwrite when credentials are present, and
+   auth input validation against malformed email/password).
 
 ## What counts as pass/fail
 
@@ -74,6 +77,7 @@ summary block (it prints one before exiting):
 ### Build Verification Result: PASS | FAIL
 
 - Typecheck: PASS | FAIL
+- expo-doctor: PASS | FAIL
 - Lint: PASS | FAIL
 - Tests: PASS | FAIL
 

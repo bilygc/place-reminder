@@ -21,7 +21,7 @@ set -uo pipefail
 FAILED=0
 SUMMARY=()
 
-echo "=== 1/3: Typecheck (tsc --noEmit) ==="
+echo "=== 1/4: Typecheck (tsc --noEmit) ==="
 if npx tsc --noEmit; then
   SUMMARY+=("Typecheck: PASS")
 else
@@ -30,7 +30,25 @@ else
 fi
 
 echo ""
-echo "=== 2/3: Lint (npm run lint) ==="
+echo "=== 2/4: Dependency health (expo-doctor) ==="
+# Catches native module duplication (e.g. a transitive dependency pinning
+# its own copy of react-native) and Expo SDK version mismatches. These are
+# invisible to tsc/eslint/jest because they only manifest at native-build
+# / runtime (TurboModuleRegistry failing to resolve core modules like
+# PlatformConstants). Root-caused 2026-08: react-native-appwrite@0.5.0
+# pinned react-native@0.73.11 as a direct (non-peer) dependency, producing
+# two react-native copies in node_modules and a bridgeless-mode crash on
+# every app launch. expo-doctor is the only tool in this pipeline capable
+# of catching that class of bug before it reaches a human in an emulator.
+if npx expo-doctor; then
+  SUMMARY+=("expo-doctor: PASS")
+else
+  SUMMARY+=("expo-doctor: FAIL")
+  FAILED=1
+fi
+
+echo ""
+echo "=== 3/4: Lint (npm run lint) ==="
 if npm run lint; then
   SUMMARY+=("Lint: PASS")
 else
@@ -39,7 +57,7 @@ else
 fi
 
 echo ""
-echo "=== 3/3: Tests (npm run test -- --ci) ==="
+echo "=== 4/4: Tests (npm run test -- --ci) ==="
 if npm run test -- --ci; then
   SUMMARY+=("Tests: PASS")
 else
