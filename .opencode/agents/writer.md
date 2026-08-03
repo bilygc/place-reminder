@@ -1,9 +1,9 @@
 ---
 description: Technical documentation author for READMEs, API docs, and guides
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/hy3
 temperature: 0.3
-steps: 10
+steps: 15
 tools:
   # Context gathering (Read-only)
   read: true

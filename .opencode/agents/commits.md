@@ -1,7 +1,7 @@
 ---
 description: Git commit message generator following conventional commit standards, and PR creation via GitHub MCP
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: opencode-go/hy3
 temperature: 0.2
 steps: 15
 tools:

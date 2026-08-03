@@ -1,7 +1,7 @@
 ---
 description: Git fixup command generator for clean history via autosquash
 mode: subagent
-model: opencode-go/deepseek-v4-pro
+model: opencode-go/qwen3.5-plus
 temperature: 0.0
 tools:
   # Context gathering (Read-only)
