@@ -121,21 +121,8 @@ export const createUser: CreateUserFunction = async (
   }
 };
 export const signIn: SignInFunction = async (email, password) => {
-  const emailResult = validateEmail(email);
-  if (!emailResult.valid) {
-    throw new Error(`Invalid email: ${emailResult.reason}`);
-  }
-
-  if (!password || password.trim() === '') {
-    throw new Error('Invalid password: password is required');
-  }
-
   try {
-    const session = await account.createEmailPasswordSession(
-      emailResult.value,
-      password
-    );
-
+    const session = await account.createEmailPasswordSession(email, password);
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
