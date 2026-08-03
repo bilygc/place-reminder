@@ -21,7 +21,7 @@ set -uo pipefail
 FAILED=0
 SUMMARY=()
 
-echo "=== 1/4: Typecheck (tsc --noEmit) ==="
+echo "=== 1/5: Typecheck (tsc --noEmit) ==="
 if npx tsc --noEmit; then
   SUMMARY+=("Typecheck: PASS")
 else
@@ -30,7 +30,7 @@ else
 fi
 
 echo ""
-echo "=== 2/4: Dependency health (expo-doctor) ==="
+echo "=== 2/5: Dependency health (expo-doctor) ==="
 # Catches native module duplication (e.g. a transitive dependency pinning
 # its own copy of react-native) and Expo SDK version mismatches. These are
 # invisible to tsc/eslint/jest because they only manifest at native-build
@@ -48,7 +48,7 @@ else
 fi
 
 echo ""
-echo "=== 3/4: Lint (npm run lint) ==="
+echo "=== 3/5: Lint (npm run lint) ==="
 if npm run lint; then
   SUMMARY+=("Lint: PASS")
 else
@@ -57,11 +57,23 @@ else
 fi
 
 echo ""
-echo "=== 4/4: Tests (npm run test -- --ci) ==="
+echo "=== 4/5: Tests (npm run test -- --ci) ==="
 if npm run test -- --ci; then
   SUMMARY+=("Tests: PASS")
 else
   SUMMARY+=("Tests: FAIL")
+  FAILED=1
+fi
+
+echo ""
+echo "=== 5/5: Test count guard (scripts/test-count-guard.sh) ==="
+# Catches silent test deletion — a diff that removes coverage without an
+# explicit, reviewed baseline update. See scripts/test-count-guard.sh for
+# full rationale and the incident that motivated this (ATO-8, 2026-08).
+if bash scripts/test-count-guard.sh; then
+  SUMMARY+=("Test count guard: PASS")
+else
+  SUMMARY+=("Test count guard: FAIL")
   FAILED=1
 fi
 
