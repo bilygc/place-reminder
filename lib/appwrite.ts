@@ -9,6 +9,8 @@ import {
   ImageGravity,
 } from 'react-native-appwrite';
 
+import get from 'lodash/get';
+
 import ensureError from '@/utils/ensureError';
 import { validateEmail } from '@/utils/validateEmail';
 
@@ -149,7 +151,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
       throw Error;
     }
 
-    const user = currentUser.documents[0];
+    const user = get(currentUser, 'documents[0]');
     return user;
   } catch (error: unknown) {
     const err = ensureError(error);
