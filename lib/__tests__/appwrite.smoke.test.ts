@@ -123,54 +123,39 @@ describe('Appwrite live ping (layer 2: real network call)', () => {
 });
 
 describe('Appwrite auth input validation (layer 3: no network, no credentials)', () => {
-  // Root cause (2026-08): signIn() forwarded email/password straight to
-  // account.createEmailPasswordSession() with no validation of its own.
-  // In production this surfaced as an unhandled Appwrite SDK error
-  // ("Invalid `email` param: Value must be a valid email address") thrown
-  // from deep inside the network call. Under Jest, react-native-appwrite
-  // resolves through whatever mock/transform is configured for the RN
-  // native layer, so asserting against the SDK's own validation behavior
-  // here is not reliable — it can silently resolve instead of throwing.
+  // History: signIn() originally forwarded email/password straight to
+  // account.createEmailPasswordSession() with no validation of its own,
+  // which surfaced as an unhandled Appwrite SDK error ("Invalid `email`
+  // param: ...") thrown from deep inside the network call. A later change
+  // added local validateEmail()/password guards; ATO-8 then removed those
+  // guards from signIn() again to simplify it and let errors propagate
+  // through the existing try/catch (matching getCurrentUser/signOut).
   //
-  // The actual fix is for signIn() to validate with the project's own
-  // utils/validateEmail() *before* calling into the SDK at all. These
-  // tests assert that local validation, so they need no env vars, no
-  // network, and no dependency on how react-native-appwrite behaves
-  // under test.
+  // createUser() still pre-validates locally and is covered by its own
+  // tests below. signIn() now delegates to the SDK directly, so the only
+  // thing this layer can assert for it without env vars/network is that
+  // errors propagate (i.e. are not swallowed). Under Jest,
+  // react-native-appwrite resolves through whatever mock/transform is
+  // configured for the RN native layer, so asserting against the SDK's
+  // own validation behavior here is not reliable — it can silently
+  // resolve instead of throwing. The signIn test below uses a tolerant
+  // pattern: it only asserts behavior IF the call rejects.
 
-  it('signIn rejects a malformed email before touching Appwrite', async () => {
-    const { signIn } = require('../appwrite');
-    await expect(signIn('not-an-email', 'some-password')).rejects.toThrow(
-      /email/i
-    );
-  });
-
-  it('signIn rejects an empty email', async () => {
-    const { signIn } = require('../appwrite');
-    await expect(signIn('', 'some-password')).rejects.toThrow(/email/i);
-  });
-
-  it('signIn rejects an empty password', async () => {
-    const { signIn } = require('../appwrite');
-    await expect(signIn('valid@example.com', '')).rejects.toThrow(
-      /password/i
-    );
-  });
-
-  it('signIn does not reject a well-formed email on the email-format check', async () => {
-    // We deliberately don't assert success/failure of the overall call —
-    // under Jest, react-native-appwrite is not exercised against a real
-    // network, so whether the SDK call resolves or rejects here says
-    // nothing about our own validation. We only assert that IF it
-    // rejects, the rejection is not our own email-format error. That's
-    // the one thing this layer is responsible for.
+  it('signIn propagates SDK errors through its try/catch', async () => {
+    // After ATO-8, signIn() calls account.createEmailPasswordSession()
+    // directly with no local pre-validation. We deliberately don't assert
+    // success/failure of the overall call — under Jest,
+    // react-native-appwrite is not exercised against a real network, so
+    // whether the SDK call resolves or rejects here says nothing about
+    // our code. We only assert that IF it rejects, signIn surfaces an
+    // Error (i.e. does not swallow it), which is the contract the
+    // existing try/catch provides.
     const { signIn } = require('../appwrite');
     try {
       await signIn('valid@example.com', 'some-password');
-      // Resolved (e.g. mocked SDK) — validation was not the blocker. Pass.
+      // Resolved (e.g. mocked SDK) — nothing to assert. Pass.
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      expect(message).not.toMatch(/invalid email/i);
+      expect(err).toBeInstanceOf(Error);
     }
   });
 
