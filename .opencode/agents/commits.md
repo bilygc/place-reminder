@@ -53,7 +53,7 @@ etc. — use those directly; they are unaffected by anything below).
 ## Critical constraint: all local git operations go through one script
 
 **You do not construct raw git commands.** Every local git operation (status,
-diff, branch creation, staging, commit, push) goes through:
+diff, branch creation, staging, commit, push, sync) goes through:
 
 ```bash
 bash scripts/commits-helper.sh <subcommand> [args...]
@@ -61,7 +61,7 @@ bash scripts/commits-helper.sh <subcommand> [args...]
 
 Available subcommands: `status`, `diff [path...]`, `diff-staged [path...]`,
 `log [-n N]`, `current-branch`, `create-branch <name>`, `stage <path...>`,
-`commit <message>`, `push <branch>`.
+`commit <message>`, `push <branch>`, `sync-with-main`.
 
 Run `bash scripts/commits-helper.sh --help` if you need to confirm the exact
 subcommand syntax before using it.
@@ -86,6 +86,42 @@ this agent's git access meaningfully narrow.
 `--force-with-lease` at the script level, regardless of what you pass. Do
 not attempt to work around this. If a push is rejected because the remote
 has diverged, stop and report it — do not force-push to resolve it.
+
+## Sync with main before pushing — required, not optional
+
+**Before every `push`**, run:
+
+```bash
+bash scripts/commits-helper.sh sync-with-main
+```
+
+This fetches `origin/main` and merges it into your current branch. Do this
+even if you don't think main has moved — the cost of checking is low, and
+the failure mode when you skip it is silent and hard to diagnose.
+
+### Why this matters (root cause, ATO-9 / PR #8)
+
+A branch that falls behind `main` can develop a merge conflict against the
+PR's base branch. When that happens, **GitHub does not run
+`pull_request`-triggered CI checks at all** — not a failing run, no run.
+From the outside this looks exactly like "the pipeline isn't triggering
+automatically," with no error message pointing at the real cause (a
+conflict banner on the PR is the only visible signal, and it's easy to
+miss). This is especially likely to bite on files that change often across
+branches, like `package-lock.json` — two branches that each add a
+different dependency will conflict there even if their actual feature
+code doesn't overlap at all.
+
+### If `sync-with-main` reports a conflict
+
+**Stop. Do not attempt to resolve it yourself.** The subcommand aborts the
+merge automatically and lists the conflicted files — it does not guess at
+resolution, especially not for generated files. Report the conflicted
+file list back to the orchestrator and let a human (or, for
+`package-lock.json` specifically, `dev` regenerating it with `npm install`
+after a manual resolution) handle it. Guessing `--ours`/`--theirs` on a
+generated lockfile can silently drop or duplicate dependencies in ways
+that won't surface until a much later, harder-to-diagnose failure.
 
 ## Staging discipline
 
@@ -121,8 +157,11 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`.
    what's relevant to this change.
 5. `bash scripts/commits-helper.sh commit "<message>"` — commit with a
    proper conventional-commit message.
-6. `bash scripts/commits-helper.sh push <branch>` — push the branch.
-7. Use `github_create_pull_request` (GitHub MCP, not this script) to open
+6. `bash scripts/commits-helper.sh sync-with-main` — fetch and merge main
+   before pushing. If this reports a conflict, stop and escalate (see
+   "Sync with main before pushing" above) — do not proceed to push.
+7. `bash scripts/commits-helper.sh push <branch>` — push the branch.
+8. Use `github_create_pull_request` (GitHub MCP, not this script) to open
    the PR.
 
 ## Constraints
@@ -132,3 +171,5 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`.
 - **No bulk staging.** See "Staging discipline" above.
 - **No force-push, ever.** See above — enforced at the script level.
 - **No raw git commands.** See "Critical constraint" above.
+- **No resolving merge conflicts.** See "If sync-with-main reports a
+  conflict" above — always escalate, never guess.
