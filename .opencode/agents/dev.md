@@ -103,6 +103,48 @@ Before writing any code, answer these questions by reading the codebase:
 - **Types**: Respect existing type systems. Don't use `any` unless forced.
 - **Comments**: Add comments only where the "why" is not obvious from the code.
 
+## Boundary Error Handling Contract
+
+Any code that crosses a boundary the app does not control — network calls,
+external SDKs (Appwrite, etc.), OS/sensor APIs (location, task manager,
+permissions), filesystem, or any I/O that can fail at runtime for reasons
+invisible to `tsc`/`eslint` — **must** ship with both of the following in
+the same change, not as follow-up work:
+
+1. **Explicit error handling at the call site.** Never let a raw SDK/OS
+   error propagate uncaught to the UI. Catch it, translate it into a
+   typed/predictable error or a defined fallback state (e.g. `null` for
+   "no session"), and only re-throw if the caller is expected to handle
+   it further up.
+2. **A test that exercises the failure path**, not just the happy path.
+   At minimum: one test per boundary call covering (a) the expected
+   "normal failure" case (e.g. no active session, invalid input reaching
+   the SDK, permission denied) and (b) confirming the function does NOT
+   throw an unhandled/raw SDK error out to its caller.
+
+This applies whether the task is new code or a bug fix. If you are fixing
+a bug that turned out to be an unhandled boundary error (e.g. an SDK
+threw a raw error string all the way to a UI component), the fix is not
+complete until a regression test for that failure path exists — this is
+the same principle behind the test-count guard in `build-verify`: a fix
+that only patches the symptom without a test securing it is treated as
+incomplete.
+
+**Do not confuse this with the `expo-doctor` playbook below.** That
+playbook is for native dependency duplication (fixed via `overrides`,
+no code change). This section is for logic-level runtime failures at
+the boundary — the two are different failure classes and need different
+fixes.
+
+### Quick checklist before reporting complete
+
+- [ ] Does this change call anything outside the app's own control
+      (SDK, network, OS API)?
+- [ ] If yes: is there a try/catch (or equivalent) that prevents a raw
+      error from reaching the UI/caller unhandled?
+- [ ] If yes: is there a test proving the failure path is handled, not
+      just the success path?
+
 ## Response Format
 
 ```markdown
@@ -243,3 +285,4 @@ per the orchestrator's Stage 3.5 retry loop.
 | Refactor reveals larger issue | Note it, implement only what was asked, surface the finding |
 | Diagnostics fail after changes | Debug and fix before reporting complete |
 | `build-verify` reports `expo-doctor: FAIL` | Follow the playbook above, not the standard TDD workflow |
+| Boundary call added without failure-path test | Do not report complete — write the test first |
