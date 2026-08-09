@@ -103,6 +103,20 @@ Depending on the request scope, evaluate across these dimensions:
 - Null/undefined dereferences
 - Race conditions
 - Error handling gaps (swallowed exceptions, missing try/catch)
+- **Unhandled boundary failures**: any call to an external SDK, network
+  request, or OS/sensor API (Appwrite, fetch, expo-location,
+  expo-task-manager, etc.) that does not catch and translate its error
+  before it can reach the UI or an untyped throw. Flag as `[HIGH]` or
+  `[CRITICAL]` depending on user-facing impact — a raw SDK error string
+  reaching the UI (e.g. `User (role: guests) missing scopes...`) is a
+  correctness and UX defect, not a nitpick.
+- **Missing failure-path test for boundary calls**: if a diff adds or
+  modifies a call across an external boundary and the accompanying test
+  file only covers the success case, flag as `[HIGH]` — "boundary call
+  added without a failure-path test" — and require `dev` to add it
+  before this can be approved. This mirrors the test-count guard's logic
+  at the review level: absence of a negative-path test is itself a
+  finding, not a gap to note in passing.
 - Type mismatches or unsafe casts
 
 ### Maintainability
@@ -160,6 +174,10 @@ Depending on the request scope, evaluate across these dimensions:
 - **Constructive**: Every finding should include a path forward.
 - **Balanced**: Always include a strengths section, even for poor code.
 - **Concise**: Don't over-explain. One finding per block, clearly separated.
+- **Boundary-call findings are never [LOW]**: an unhandled or untested
+  external-boundary failure is at minimum [MEDIUM] (missing test only)
+  or [HIGH]/[CRITICAL] (unhandled error reaching UI). Do not downgrade
+  these for being "just error handling."
 
 ## Escalation
 
