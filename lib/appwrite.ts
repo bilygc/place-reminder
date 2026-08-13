@@ -96,7 +96,7 @@ export const createUser: CreateUserFunction = async (
       username
     );
     if (!newAccount) {
-      throw Error;
+      throw new Error('Account creation failed: account.create returned null');
     }
 
     const avatarUrl = avatars.getInitials(username);
@@ -138,7 +138,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     const currentAccount = await account.get();
 
     if (!currentAccount) {
-      throw Error;
+      throw new Error('No active account: account.get returned null');
     }
 
     const currentUser = await database.listDocuments(
@@ -148,7 +148,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     );
 
     if (!currentUser) {
-      throw Error;
+      throw new Error('User document not found: user collection query returned null');
     }
 
     const user = get(currentUser, 'documents[0]');
@@ -268,7 +268,7 @@ export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
     } else {
       throw new Error('Invalid file type');
     }
-    if (!fileUrl) throw Error;
+    if (!fileUrl) throw new Error('File preview generation failed: no URL returned');
     return fileUrl;
   } catch (error: unknown) {
     const err = ensureError(error);
