@@ -1,8 +1,7 @@
 ---
 description: TDD feature implementation, bug fixing, and refactoring specialist
 mode: subagent
-model: opencode-go/glm-5.2
-reasoningEffort: max
+model: opencode-go/kimi-k2.7-code
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

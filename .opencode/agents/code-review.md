@@ -1,7 +1,7 @@
 ---
 description: Code quality, security, and performance auditor
 mode: subagent
-model: opencode-go/qwen3.7-max
+model: opencode-go/deepseek-v4-pro
 temperature: 0.1
 tools:
   # Context gathering (Read-only)

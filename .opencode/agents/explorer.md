@@ -1,8 +1,8 @@
 ---
 description: Fast codebase search and file pattern discovery specialist
 mode: subagent
-model: opencode-go/qwen3.5-plus
-temperature: 0.0
+model: opencode-go/mimo-v2.5
+temperature: 0.1
 tools:
   # Context gathering (Read-only)
   read: true
