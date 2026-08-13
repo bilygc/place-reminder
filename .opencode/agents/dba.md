@@ -1,7 +1,7 @@
 ---
 description: Database specialist for Appwrite — schema design, migrations, queries, and Users/Teams management
 mode: subagent
-model: opencode-go/glm-5.2
+model: opencode-go/kimi-k2.7-code
 reasoningEffort: max
 temperature: 0.1
 tools:

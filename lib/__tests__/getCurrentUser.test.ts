@@ -7,10 +7,13 @@
  * collection query, so the `get(currentUser, 'documents[0]')` swap
  * can't silently change what callers receive.
  *
- * The react-native-appwrite SDK is fully mocked — no real network and
- * no real credentials. Non-empty placeholder env vars are set only so
- * appwrite.ts's module-level requireEnv() config validation passes at
- * import time.
+ * The react-native-appwrite SDK is fully mocked via the shared manual mock
+ * at `__mocks__/react-native-appwrite.js` (no real network, no real
+ * credentials). Non-empty placeholder env vars are set only so appwrite.ts's
+ * module-level requireEnv() config validation passes at import time.
+ *
+ * Error-path coverage for getCurrentUser() lives in appwrite.api.test.ts to
+ * avoid duplication; this file keeps the two happy-path regression guards.
  */
 
 // Non-empty placeholders so appwrite.ts module-level requireEnv() passes.
@@ -23,27 +26,8 @@ process.env.EXPO_PUBLIC_USER_COLLECTION_ID = 'dummy-users';
 process.env.EXPO_PUBLIC_REMINDER_COLLECTION_ID = 'dummy-reminders';
 process.env.EXPO_PUBLIC_STORAGE_ID = 'dummy-storage';
 
-jest.mock('react-native-appwrite', () => {
-  const accountInstance = { get: jest.fn() };
-  const databaseInstance = { listDocuments: jest.fn() };
-  return {
-    Client: jest.fn(() => ({
-      setEndpoint: jest.fn().mockReturnThis(),
-      setProject: jest.fn().mockReturnThis(),
-      setPlatform: jest.fn().mockReturnThis(),
-    })),
-    Account: jest.fn(() => accountInstance),
-    Databases: jest.fn(() => databaseInstance),
-    Avatars: jest.fn(() => ({ getInitials: jest.fn() })),
-    Storage: jest.fn(() => ({})),
-    Query: { equal: jest.fn() },
-    ID: { unique: jest.fn() },
-    ImageGravity: { Top: 'top' },
-    // Expose the singleton instances so tests can drive their methods.
-    __account: accountInstance,
-    __database: databaseInstance,
-  };
-});
+// Use the shared manual mock (no factory) — see __mocks__/react-native-appwrite.js.
+jest.mock('react-native-appwrite');
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appwriteModule = require('react-native-appwrite');
@@ -53,6 +37,11 @@ const databaseInstance = appwriteModule.__database;
 describe('getCurrentUser (ATO-9: lodash get() swap regression guard)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset implementations so mockResolvedValue from one test can't leak
+    // into another; each test sets the resolution it needs.
+    [accountInstance.get, databaseInstance.listDocuments].forEach((fn) =>
+      fn.mockReset()
+    );
   });
 
   it('returns the first document from the user collection query', async () => {
