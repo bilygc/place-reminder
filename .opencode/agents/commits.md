@@ -1,7 +1,7 @@
 ---
 description: Git commit message generator following conventional commit standards, and PR creation via GitHub MCP
 mode: subagent
-model: opencode-go/hy3
+model: opencode-go/gpt-5.6-luna
 temperature: 0.2
 steps: 15
 tools:

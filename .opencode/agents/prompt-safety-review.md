@@ -1,7 +1,7 @@
 ---
 description: AI prompt security analysis and injection vulnerability specialist
 mode: subagent
-model: opencode-go/qwen3.7-max
+model: opencode-go/kimi-k2.6
 steps: 10
 temperature: 0.1
 tools:

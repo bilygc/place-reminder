@@ -1,7 +1,7 @@
 ---
 description: Technical guidance, architecture strategy, and engineering best practices advisor
 mode: subagent
-model: opencode-go/grok-4.5
+model: opencode-go/glm-5.3
 reasoningEffort: high
 steps: 12
 temperature: 0.2

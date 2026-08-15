@@ -1,7 +1,7 @@
 ---
 description: Multi-repo research and external documentation specialist
 mode: subagent
-model: opencode-go/qwen3.8-max
+model: opencode-go/qwen3.7-plus
 temperature: 0.1
 steps: 10
 tools:

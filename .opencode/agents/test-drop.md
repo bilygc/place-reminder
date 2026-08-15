@@ -1,7 +1,7 @@
 ---
 description: Redundant and low-value test identifier for test suite pruning
 mode: subagent
-model: opencode-go/qwen3.6-plus
+model: opencode-go/kimi-k2.6
 temperature: 0.1
 steps: 10
 tools:

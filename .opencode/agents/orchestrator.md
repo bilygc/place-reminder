@@ -1,7 +1,7 @@
 ---
 description: Intelligent router that analyzes user requests and delegates to specialized subagents
 mode: primary
-model: opencode-go/kimi-k3
+model: opencode-go/grok-4.5
 temperature: 0.1
 tools:
   # Delegation only
