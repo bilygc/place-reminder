@@ -24,7 +24,7 @@ export interface VideoPost {
 // Function return types
 export type CreateUserResponse = Promise<Models.Document>;
 export type SignInResponse = Promise<Models.Session>;
-export type GetCurrentUserResponse = Promise<Models.Document>;
+export type GetCurrentUserResponse = Promise<Models.Document | null | undefined>;
 export type GetAllPostsResponse = Promise<Models.Document[]>;
 export type GetLatestPostsResponse = Promise<Models.Document[]>;
 export type GetBookmarkedPostsResponse = Promise<Models.Document[]>;

@@ -1,6 +1,7 @@
+import { observer } from 'mobx-react-lite';
 import { View, Text, ScrollView } from 'react-native';
-import { Link } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Link, router } from 'expo-router';
+import React, { useContext, useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { images } from '@/constants';
 import Animated, {
@@ -13,17 +14,59 @@ import Animated, {
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import { useAppwrite } from '@/hooks/useAppwrite';
-import { signIn } from '@/lib/appwrite';
+import { getCurrentUser, signIn } from '@/lib/appwrite';
+import { validateEmail } from '@/utils/validateEmail';
+import ensureError from '@/utils/ensureError';
 import { GreenLoading } from '@/components/Loading/Loading';
+import { UserContext } from '@/store/user';
 
-const SignIn = () => {
+const SignIn = observer(() => {
   const [signInData, setSignInData] = useState({ Email: '', Password: '' });
+  const user = useContext(UserContext);
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const rotate = useSharedValue(0);
-  const { refetch, isLoading } = useAppwrite(() =>
-    signIn(signInData.Email, signInData.Password)
+
+  const { refetch, isLoading } = useAppwrite(
+    async (email: string, password: string) => {
+      await signIn(email, password);
+      return getCurrentUser();
+    }
   );
+
+  const submit = async () => {
+    const emailResult = validateEmail(signInData.Email);
+    if (!emailResult.valid) {
+      alert(`Invalid email: ${emailResult.reason}`);
+      return;
+    }
+
+    if (!signInData.Password || signInData.Password.trim() === '') {
+      alert('Password is required');
+      return;
+    }
+
+    try {
+      const userDoc = await refetch(emailResult.value, signInData.Password);
+      if (!userDoc) {
+        throw new Error('Unable to load user profile after sign in');
+      }
+
+      user.login({
+        session: {
+          $id: userDoc.$id,
+          isLoggedIn: true,
+        },
+        email: userDoc.email,
+        userName: userDoc.email,
+        avatar: userDoc.avatar,
+      });
+      router.replace('/home');
+    } catch (error: unknown) {
+      const err = ensureError(error);
+      alert(err.message);
+    }
+  };
 
   useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
@@ -82,6 +125,9 @@ const SignIn = () => {
             handleChangeText={(text) =>
               setSignInData({ ...signInData, Email: text })
             }
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
           />
           <FormField
             title="Password"
@@ -99,7 +145,7 @@ const SignIn = () => {
           <View className="mt-5">
             <CustomButton
               title="Log In"
-              handlePress={refetch}
+              handlePress={submit}
               textStyles="text-white font-inbold"
             />
           </View>
@@ -113,6 +159,6 @@ const SignIn = () => {
       </ScrollView>
     </SafeAreaView>
   );
-};
+});
 
 export default SignIn;

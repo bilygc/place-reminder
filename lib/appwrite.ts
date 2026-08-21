@@ -122,9 +122,31 @@ export const createUser: CreateUserFunction = async (
     throw new Error(err.message);
   }
 };
+function isUnauthenticatedError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('missing scope') ||
+    message.includes('role: guests') ||
+    message.includes('unauthorized') ||
+    message.includes('401')
+  );
+}
+
 export const signIn: SignInFunction = async (email, password) => {
+  const emailResult = validateEmail(email);
+  if (!emailResult.valid) {
+    throw new Error(`Invalid email: ${emailResult.reason}`);
+  }
+
+  if (!password || password.trim() === '') {
+    throw new Error('Invalid password: password is required');
+  }
+
   try {
-    const session = await account.createEmailPasswordSession(email, password);
+    const session = await account.createEmailPasswordSession(
+      emailResult.value,
+      password
+    );
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
@@ -138,7 +160,7 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     const currentAccount = await account.get();
 
     if (!currentAccount) {
-      throw new Error('No active account: account.get returned null');
+      return null;
     }
 
     const currentUser = await database.listDocuments(
@@ -155,6 +177,9 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     return user;
   } catch (error: unknown) {
     const err = ensureError(error);
+    if (isUnauthenticatedError(err)) {
+      return null;
+    }
     console.error(err.message);
     throw new Error(err.message);
   }

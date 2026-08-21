@@ -528,6 +528,31 @@ describe('appwrite.api', () => {
       expect(result).toBe(session);
     });
 
+    it('rejects an invalid email before touching the SDK', async () => {
+      await expect(signIn('not-an-email', 'password')).rejects.toThrow(
+        'Invalid email: invalid-format'
+      );
+
+      expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty email before touching the SDK', async () => {
+      await expect(signIn('', 'password')).rejects.toThrow('Invalid email: empty');
+
+      expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty password before touching the SDK', async () => {
+      await expect(signIn('test@example.com', '')).rejects.toThrow(
+        'Invalid password: password is required'
+      );
+
+      expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
     it('rethrows a wrapped error when createEmailPasswordSession rejects', async () => {
       accountInstance.createEmailPasswordSession.mockRejectedValue(
         new Error('invalid credentials')
@@ -544,10 +569,27 @@ describe('appwrite.api', () => {
   // getCurrentUser (error paths — happy paths live in getCurrentUser.test.ts)
   // ---------------------------------------------------------------------------
   describe('getCurrentUser (error paths)', () => {
-    it('rethrows a wrapped error when account.get() rejects', async () => {
-      accountInstance.get.mockRejectedValue(new Error('no active session'));
+    it('returns null when account.get() rejects with a guest/missing-scopes error', async () => {
+      accountInstance.get.mockRejectedValue(
+        new Error('User (role: guests) missing scopes (["account"])')
+      );
 
-      await expect(getCurrentUser()).rejects.toThrow('no active session');
+      await expect(getCurrentUser()).resolves.toBeNull();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      expect(databaseInstance.listDocuments).not.toHaveBeenCalled();
+    });
+
+    it('returns null for other unauthenticated-style errors (401 / unauthorized)', async () => {
+      accountInstance.get.mockRejectedValue(new Error('Request failed: 401'));
+
+      await expect(getCurrentUser()).resolves.toBeNull();
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a wrapped error when account.get() rejects with a non-auth failure', async () => {
+      accountInstance.get.mockRejectedValue(new Error('network failure'));
+
+      await expect(getCurrentUser()).rejects.toThrow('network failure');
       expect(consoleErrorSpy).toHaveBeenCalled();
       expect(databaseInstance.listDocuments).not.toHaveBeenCalled();
     });

@@ -1,11 +1,10 @@
 /**
- * Unit tests for hooks/useAppwrite.ts — the generic data-fetching hook.
+ * Unit tests for hooks/useAppwrite.ts — the generic async hook.
  *
- * Covers: initial state, successful fetch (isLoading true->false, data set),
- * the array-normalization rule (single object -> [obj], array stays as array),
- * error path via ensureError (including a non-Error thrown value), refetch
- * re-invoking fn, and unmount-during-flight behavior (the hook does NOT guard
- * with isMounted, so we assert the honest behavior: it does not throw).
+ * Covers: default lazy behavior (no auto-fetch on mount), optional immediate
+ * execution, successful fetch with array normalization, error handling with
+ * both state updates and re-throws, refetch argument forwarding, and
+ * unmount-during-flight behavior.
  *
  * Rendered with raw react-test-renderer + act() (React 19). The harness writes
  * the hook's return value into a ref-like object on each render; act() flushes
@@ -64,45 +63,40 @@ describe('useAppwrite', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  describe('initial state', () => {
-    it('exposes empty data, isLoading=false, error=null before the fetch resolves', () => {
-      // A fn that never resolves — so the hook stays in the "loading" state
-      // after the effect fires, with the pre-fetch initial values visible
-      // only before the effect runs. After act(create) the effect has run
-      // and setIsLoading(true) has applied, so isLoading is true here.
-      const neverResolve = jest.fn(
-        () => new Promise<unknown>(() => {})
-      );
-      const { result } = renderHook(() => useAppwrite(neverResolve));
-
-      expect(result.current.data).toEqual([]);
-      expect(result.current.isLoading).toBe(true);
-      expect(result.current.error).toBeNull();
-      expect(typeof result.current.refetch).toBe('function');
-    });
-
-    it('returns refetch as a function that re-invokes the fetch', async () => {
+  describe('default lazy behavior', () => {
+    it('does not call fn on mount', async () => {
       const fn = jest.fn().mockResolvedValue({ a: 1 });
       const { result } = renderHook(() => useAppwrite(fn));
+
+      expect(result.current.data).toEqual([]);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.error).toBeNull();
+      expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('returns refetch as a function that invokes fn', async () => {
+      const fn = jest.fn().mockResolvedValue({ a: 1 });
+      const { result } = renderHook(() => useAppwrite(fn));
+
+      result.current.refetch();
       await flush();
 
       expect(fn).toHaveBeenCalledTimes(1);
-      result.current.refetch();
-      await flush();
-      expect(fn).toHaveBeenCalledTimes(2);
+      expect(result.current.data).toEqual([{ a: 1 }]);
+      expect(result.current.isLoading).toBe(false);
     });
   });
 
-  describe('successful fetch', () => {
-    it('normalizes a single object result to a one-element array', async () => {
+  describe('immediate execution', () => {
+    it('calls fn on mount when immediate is true', async () => {
       const obj = { id: 'x', name: 'alice' };
       const fn = jest.fn().mockResolvedValue(obj);
-      const { result } = renderHook(() => useAppwrite(fn));
+      const { result } = renderHook(() => useAppwrite(fn, { immediate: true }));
 
-      // isLoading flips true during the fetch.
       expect(result.current.isLoading).toBe(true);
       await flush();
 
+      expect(fn).toHaveBeenCalledTimes(1);
       expect(result.current.isLoading).toBe(false);
       expect(result.current.data).toEqual([obj]);
       expect(result.current.error).toBeNull();
@@ -111,21 +105,76 @@ describe('useAppwrite', () => {
     it('keeps an array result as-is (does not double-wrap)', async () => {
       const arr = [{ id: '1' }, { id: '2' }];
       const fn = jest.fn().mockResolvedValue(arr);
-      const { result } = renderHook(() => useAppwrite(fn));
+      const { result } = renderHook(() => useAppwrite(fn, { immediate: true }));
 
       await flush();
 
       expect(result.current.data).toEqual(arr);
       expect(result.current.data).toBe(arr);
     });
+  });
 
-    it('resets isLoading back to false after the fetch completes', async () => {
+  describe('refetch argument forwarding', () => {
+    it('passes arguments through to the wrapped function', async () => {
       const fn = jest.fn().mockResolvedValue('ok');
+      const { result } = renderHook(() => useAppwrite(fn));
+
+      result.current.refetch('a@b.com', 'secret');
+      await flush();
+
+      expect(fn).toHaveBeenCalledWith('a@b.com', 'secret');
+      expect(result.current.data).toEqual(['ok']);
+    });
+
+    it('returns the raw result from refetch so callers can use it directly', async () => {
+      const fn = jest.fn().mockResolvedValue({ raw: true });
+      const { result } = renderHook(() => useAppwrite(fn));
+
+      let returned: unknown;
+      await act(async () => {
+        returned = await result.current.refetch();
+      });
+
+      expect(returned).toEqual({ raw: true });
+    });
+  });
+
+  describe('error handling', () => {
+    it('sets error to the message of a thrown Error, logs it, and re-throws', async () => {
+      const fn = jest.fn().mockRejectedValue(new Error('db unavailable'));
       const { result } = renderHook(() => useAppwrite(fn as any));
 
-      expect(result.current.isLoading).toBe(true);
-      await flush();
+      let thrown: Error | undefined;
+      await act(async () => {
+        try {
+          await result.current.refetch();
+        } catch (err) {
+          thrown = err as Error;
+        }
+      });
+
       expect(result.current.isLoading).toBe(false);
+      expect(result.current.error).toBe('db unavailable');
+      expect(thrown?.message).toBe('db unavailable');
+      expect(result.current.data).toEqual([]);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('db unavailable');
+    });
+
+    it('wraps a non-Error thrown value via ensureError (Unknown error: ...)', async () => {
+      const fn = jest.fn().mockRejectedValue('boom-string');
+      const { result } = renderHook(() => useAppwrite(fn as any));
+
+      await act(async () => {
+        try {
+          await result.current.refetch();
+        } catch {
+          // expected
+        }
+      });
+
+      expect(result.current.error).toMatch(/^Unknown error: /);
+      expect(result.current.isLoading).toBe(false);
+      expect(consoleErrorSpy).toHaveBeenCalled();
     });
 
     it('clears a previous error when a subsequent fetch succeeds', async () => {
@@ -134,75 +183,26 @@ describe('useAppwrite', () => {
       fn.mockResolvedValueOnce('ok');
       const { result } = renderHook(() => useAppwrite(fn as any));
 
-      await flush();
+      await act(async () => {
+        try {
+          await result.current.refetch();
+        } catch {
+          // expected
+        }
+      });
       expect(result.current.error).toBe('boom');
 
-      result.current.refetch();
-      await flush();
+      await act(async () => {
+        await result.current.refetch();
+      });
       expect(result.current.error).toBeNull();
       expect(result.current.isLoading).toBe(false);
       expect(result.current.data).toEqual(['ok']);
     });
   });
 
-  describe('error handling', () => {
-    it('sets error to the message of a thrown Error and keeps isLoading false', async () => {
-      const fn = jest.fn().mockRejectedValue(new Error('db unavailable'));
-      const { result } = renderHook(() => useAppwrite(fn as any));
-
-      await flush();
-
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.error).toBe('db unavailable');
-      // data stays at its initial empty array (not overwritten on error).
-      expect(result.current.data).toEqual([]);
-      expect(consoleErrorSpy).toHaveBeenCalledWith('db unavailable');
-    });
-
-    it('wraps a non-Error thrown value via ensureError (Unknown error: ...)', async () => {
-      // Throwing a bare string — not an Error instance. ensureError stringifies
-      // it and prefixes "Unknown error: ".
-      const fn = jest.fn().mockRejectedValue('boom-string');
-      const { result } = renderHook(() => useAppwrite(fn as any));
-
-      await flush();
-
-      expect(result.current.error).toMatch(/^Unknown error: /);
-      expect(result.current.isLoading).toBe(false);
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-
-    it('handles a thrown null (ensureError still produces a message)', async () => {
-      const fn = jest.fn().mockRejectedValue(null);
-      const { result } = renderHook(() => useAppwrite(fn as any));
-
-      await flush();
-
-      expect(result.current.error).toMatch(/^Unknown error: /);
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    it('refetch after an error re-runs fn and updates state on success', async () => {
-      const fn = jest.fn();
-      fn.mockRejectedValueOnce(new Error('first'));
-      fn.mockResolvedValueOnce({ v: 42 });
-      const { result } = renderHook(() => useAppwrite(fn as any));
-
-      await flush();
-      expect(result.current.error).toBe('first');
-
-      result.current.refetch();
-      await flush();
-      expect(result.current.error).toBeNull();
-      expect(result.current.data).toEqual([{ v: 42 }]);
-    });
-  });
-
   describe('unmount during in-flight fetch', () => {
     it('does not throw when the fetch resolves after unmount (no isMounted guard)', async () => {
-      // The hook does NOT guard setState with isMounted, so resolving after
-      // unmount schedules an update on a detached tree. React 19 no longer
-      // warns for this; assert the flush simply does not throw.
       let resolveFn: (v: unknown) => void = () => {};
       const fn = jest.fn(
         () =>
@@ -210,16 +210,14 @@ describe('useAppwrite', () => {
             resolveFn = resolve;
           })
       );
-      const { unmount } = renderHook(() => useAppwrite(fn as any));
+      const { result, unmount } = renderHook(() => useAppwrite(fn as any));
 
+      result.current.refetch();
       unmount();
       await act(async () => {
         resolveFn('late');
         await Promise.resolve();
       });
-      // No throw — the hook's lack of an isMounted guard is benign under
-      // React 19 but worth pinning so a future refactor that adds the guard
-      // doesn't silently change observable behavior.
       expect(true).toBe(true);
     });
   });

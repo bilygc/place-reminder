@@ -1,10 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { getCurrentUser } from '@/lib/appwrite';
 import { observer } from 'mobx-react-lite';
 import { User, UserContext } from '@/store/user';
 
-const Auth = observer(({ children }: React.PropsWithChildren<{}>) => {
-  const user = new User();
+const Auth = observer(({ children }: React.PropsWithChildren) => {
+  const user = useMemo(() => new User(), []);
 
   useEffect(() => {
     getCurrentUser()
@@ -22,9 +22,9 @@ const Auth = observer(({ children }: React.PropsWithChildren<{}>) => {
         }
       })
       .catch((error) => {
-        console.error(error);
+        console.error('Unexpected auth initialization error:', error);
       });
-  }, []);
+  }, [user]);
 
   return <UserContext.Provider value={user}>{children}</UserContext.Provider>;
 });

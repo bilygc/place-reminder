@@ -3,27 +3,30 @@
  *
  * Covers: form state (email/password FormField inputs update local state),
  * submit wiring (pressing "Log In" calls signIn with the current email and
- * password via the useAppwrite refetch → fn() chain), loading overlay
- * (GreenLoading renders when isLoading is true, absent when false), error
- * resilience (screen renders without crashing when the hook reports an error),
- * and the two navigation Links ("Forgot password?" → /reset-pwd, "Sign up" →
- * /sign-up).
+ * password, then loads the user profile via getCurrentUser and navigates home),
+ * loading overlay behavior, client-side validation (empty/bad email alerts
+ * without calling Appwrite), error feedback when sign-in fails, and the two
+ * navigation Links ("Forgot password?" → /reset-pwd, "Sign up" → /sign-up).
  *
  * expo-router is mocked via the shared manual mock (Link is inspectable).
  * react-native-reanimated is mocked via the shared manual mock (no native
  * worklet runtime). useAppwrite is mocked with a controllable factory whose
- * refetch invokes the captured fn so the signIn call can be asserted.
- *
- * Rendered with raw react-test-renderer + act().
+ * refetch forwards arguments to the captured fn so the signIn call can be
+ * asserted.
  */
 jest.mock('expo-router');
 jest.mock('react-native-reanimated');
 jest.mock('@/lib/appwrite', () => ({
   signIn: jest.fn(),
+  getCurrentUser: jest.fn().mockResolvedValue({
+    $id: 'user-1',
+    email: 'user@example.com',
+    avatar: 'https://avatar',
+  }),
 }));
 jest.mock('@/hooks/useAppwrite', () => ({
   useAppwrite: jest.fn((fn) => ({
-    refetch: () => fn(),
+    refetch: (...args: unknown[]) => fn(...args),
     isLoading: false,
     data: [],
     error: null,
@@ -38,9 +41,9 @@ import SignIn from '../(auth)/sign-in';
 import { FormField } from '@/components/FormField';
 import { GreenLoading } from '@/components/Loading/Loading';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { Link } = require('expo-router');
+const { Link, router } = require('expo-router');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { signIn } = require('@/lib/appwrite');
+const { signIn, getCurrentUser } = require('@/lib/appwrite');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { useAppwrite } = require('@/hooks/useAppwrite');
 
@@ -92,12 +95,16 @@ function findButton(
 }
 
 describe('app/(auth)/sign-in', () => {
+  let alertMock: jest.Mock;
+
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    alertMock = jest.fn();
+    (globalThis as any).alert = alertMock;
     // Re-establish the default useAppwrite implementation after clearAllMocks.
     useAppwrite.mockImplementation((fn: any) => ({
-      refetch: () => fn(),
+      refetch: (...args: unknown[]) => fn(...args),
       isLoading: false,
       data: [],
       error: null,
@@ -116,6 +123,12 @@ describe('app/(auth)/sign-in', () => {
 
   it('renders without crashing', () => {
     expect(() => render()).not.toThrow();
+  });
+
+  it('does not call signIn on mount', () => {
+    render();
+    expect(signIn).not.toHaveBeenCalled();
+    expect(getCurrentUser).not.toHaveBeenCalled();
   });
 
   it('updates the Email FormField value when its handleChangeText fires', () => {
@@ -142,7 +155,7 @@ describe('app/(auth)/sign-in', () => {
     expect(findField(r, 'Password').props.value).toBe('secret123');
   });
 
-  it('calls signIn with the current email and password when "Log In" is pressed', () => {
+  it('calls signIn with the current email and password when "Log In" is pressed', async () => {
     const r = render();
     act(() => {
       findField(r, 'Email').props.handleChangeText('user@example.com');
@@ -151,11 +164,68 @@ describe('app/(auth)/sign-in', () => {
       findField(r, 'Password').props.handleChangeText('secret123');
     });
 
-    act(() => {
+    await act(async () => {
       findButton(r, 'Log In').props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(signIn).toHaveBeenCalledWith('user@example.com', 'secret123');
+    expect(getCurrentUser).toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith('/home');
+  });
+
+  it('alerts and does not call signIn when the email is empty', async () => {
+    const r = render();
+    act(() => {
+      findField(r, 'Password').props.handleChangeText('secret123');
+    });
+
+    await act(async () => {
+      findButton(r, 'Log In').props.onPress();
+    });
+
+    expect(signIn).not.toHaveBeenCalled();
+    expect(alertMock).toHaveBeenCalled();
+    expect(String(alertMock.mock.calls[0][0])).toMatch(/invalid email/i);
+  });
+
+  it('alerts and does not call signIn when the password is empty', async () => {
+    const r = render();
+    act(() => {
+      findField(r, 'Email').props.handleChangeText('user@example.com');
+    });
+
+    await act(async () => {
+      findButton(r, 'Log In').props.onPress();
+    });
+
+    expect(signIn).not.toHaveBeenCalled();
+    expect(alertMock).toHaveBeenCalledWith('Password is required');
+  });
+
+  it('alerts when signIn fails', async () => {
+    signIn.mockRejectedValueOnce(new Error('invalid credentials'));
+    const r = render();
+    act(() => {
+      findField(r, 'Email').props.handleChangeText('user@example.com');
+    });
+    act(() => {
+      findField(r, 'Password').props.handleChangeText('secret123');
+    });
+
+    await act(async () => {
+      try {
+        findButton(r, 'Log In').props.onPress();
+        await Promise.resolve();
+        await Promise.resolve();
+      } catch {
+        // The alert handler catches the error; act() flushes it.
+      }
+    });
+
+    expect(alertMock).toHaveBeenCalledWith('invalid credentials');
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('renders the GreenLoading overlay when isLoading is true', () => {

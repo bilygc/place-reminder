@@ -149,8 +149,25 @@ describe('Auth', () => {
     expect(captured.current?.isLoggedIn).toBe(false);
   });
 
-  it('logs to console.error and does not call login when getCurrentUser rejects', async () => {
-    accountInstance.get.mockRejectedValue(new Error('no active session'));
+  it('does not call login or log an error when getCurrentUser returns null (unauthenticated)', async () => {
+    accountInstance.get.mockRejectedValue(
+      new Error('User (role: guests) missing scopes (["account"])')
+    );
+
+    const captured: Captured = { current: null };
+    const renderer = renderAuth(captured);
+    await flush();
+
+    expect(loginSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    // Children still render in the logged-out state.
+    expect(renderer.root.findByType(Text).props.children).toBe('child-marker');
+    expect(captured.current).toBeInstanceOf(User);
+    expect(captured.current?.isLoggedIn).toBe(false);
+  });
+
+  it('logs to console.error and does not call login when getCurrentUser rejects with a non-auth error', async () => {
+    accountInstance.get.mockRejectedValue(new Error('network failure'));
 
     const captured: Captured = { current: null };
     const renderer = renderAuth(captured);
