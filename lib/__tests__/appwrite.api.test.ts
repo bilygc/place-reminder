@@ -101,6 +101,11 @@ describe('appwrite.api', () => {
     Query.contains.mockReturnValue('Q:contains');
     Query.search.mockReturnValue('Q:search');
     ID.unique.mockReturnValue('gen-id');
+    // Default: no active Appwrite session, so signIn's session probe
+    // does not treat the client as already authenticated.
+    accountInstance.get.mockRejectedValue(
+      new Error('User (role: guests) missing scopes (["account"])')
+    );
     // Silence console.error — every error path in appwrite.ts calls it.
     consoleErrorSpy = jest
       .spyOn(console, 'error')
@@ -521,6 +526,7 @@ describe('appwrite.api', () => {
 
       const result = await signIn('test@example.com', 'password');
 
+      expect(accountInstance.get).toHaveBeenCalled();
       expect(accountInstance.createEmailPasswordSession).toHaveBeenCalledWith(
         'test@example.com',
         'password'
@@ -528,11 +534,63 @@ describe('appwrite.api', () => {
       expect(result).toBe(session);
     });
 
+    it('deletes an existing active session before creating a new one', async () => {
+      accountInstance.get.mockResolvedValue({ $id: 'acc-1' });
+      accountInstance.deleteSession.mockResolvedValue({ $id: 'current' });
+      const session = { $id: 'sess-2', userId: 'acc-1' };
+      accountInstance.createEmailPasswordSession.mockResolvedValue(session);
+
+      const result = await signIn('test@example.com', 'password');
+
+      expect(accountInstance.get).toHaveBeenCalled();
+      expect(accountInstance.deleteSession).toHaveBeenCalledWith('current');
+      expect(accountInstance.createEmailPasswordSession).toHaveBeenCalledWith(
+        'test@example.com',
+        'password'
+      );
+      expect(result).toBe(session);
+    });
+
+    it('swallows deletion errors and still creates a new session', async () => {
+      accountInstance.get.mockResolvedValue({ $id: 'acc-1' });
+      accountInstance.deleteSession.mockRejectedValue(
+        new Error('session already expired')
+      );
+      const session = { $id: 'sess-3', userId: 'acc-1' };
+      accountInstance.createEmailPasswordSession.mockResolvedValue(session);
+
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {});
+
+      const result = await signIn('test@example.com', 'password');
+
+      expect(accountInstance.deleteSession).toHaveBeenCalledWith('current');
+      expect(accountInstance.createEmailPasswordSession).toHaveBeenCalledWith(
+        'test@example.com',
+        'password'
+      );
+      expect(result).toBe(session);
+
+      warnSpy.mockRestore();
+    });
+
+    it('rethrows a non-authentication error from the session probe', async () => {
+      accountInstance.get.mockRejectedValue(new Error('network failure'));
+
+      await expect(
+        signIn('test@example.com', 'password')
+      ).rejects.toThrow('network failure');
+      expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
     it('rejects an invalid email before touching the SDK', async () => {
       await expect(signIn('not-an-email', 'password')).rejects.toThrow(
         'Invalid email: invalid-format'
       );
 
+      expect(accountInstance.get).not.toHaveBeenCalled();
       expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
       expect(consoleErrorSpy).not.toHaveBeenCalled();
     });
@@ -540,6 +598,7 @@ describe('appwrite.api', () => {
     it('rejects an empty email before touching the SDK', async () => {
       await expect(signIn('', 'password')).rejects.toThrow('Invalid email: empty');
 
+      expect(accountInstance.get).not.toHaveBeenCalled();
       expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
       expect(consoleErrorSpy).not.toHaveBeenCalled();
     });
@@ -549,6 +608,7 @@ describe('appwrite.api', () => {
         'Invalid password: password is required'
       );
 
+      expect(accountInstance.get).not.toHaveBeenCalled();
       expect(accountInstance.createEmailPasswordSession).not.toHaveBeenCalled();
       expect(consoleErrorSpy).not.toHaveBeenCalled();
     });

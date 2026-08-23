@@ -69,6 +69,12 @@ const SignIn = observer(() => {
   };
 
   useEffect(() => {
+    if (user.isLoggedIn) {
+      router.replace('/home');
+    }
+  }, [user, user.isLoggedIn]);
+
+  useEffect(() => {
     scale.value = withTiming(1, { duration: 500 });
     opacity.value = withTiming(1, { duration: 500 });
     rotate.value = withSequence(
