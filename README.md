@@ -4,6 +4,7 @@ Location-based reminder app built with [Expo](https://expo.dev) and [Expo Router
 
 ## Features
 
+- **Create reminder flow (ATO-12)**: Type a description, pick a location via current GPS or map pin picker, and create an owner-scoped reminder. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md).
 - **Location-based reminders**: Set reminders that trigger when you enter or leave specific places using geofencing.
 - **Background location tracking**: Reminders fire even when the app is in the background (requires a development build on Android).
 
@@ -38,7 +39,9 @@ You can start developing by editing the files inside the **app** directory. This
 npm test
 ```
 
-Runs the Jest unit test suite in CI mode (`jest --ci`). Tests cover the `reminderToRegion` helper and other core modules.
+Runs the Jest unit test suite in CI mode (`jest --ci`, preset `jest-expo`). Baseline after ATO-12: **366 tests / 33 suites green**.
+
+New coverage includes the create-reminder flow: `lib/__tests__/createReminder.test.ts` (owner-scoped `createReminder` contract and validation), `lib/__tests__/locationService.reminder.test.ts` (`getCurrentLocationWithLabel` and `LocationPermissionDeniedError`), `utils/__tests__/validateReminder.test.ts` (description/location validation), and `__mocks__/react-native-maps.js` for `MapPicker` tests. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md) for details.
 
 ## Get a fresh project
 
@@ -49,6 +52,12 @@ npm run reset-project
 ```
 
 This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+
+## Documentation
+
+- [Create Reminder Flow (ATO-12)](docs/create-reminder-flow.md) — user flow, `createReminder` API, location helpers, validation, components, Appwrite schema/permissions, `react-native-maps` setup, and testing notes.
+- [Location Tracking & Geofencing Guide](docs/location-tracking-guide.md) — background tracking, geofencing, and `LocationService` singleton.
+- [Known Issues](docs/known-issues.md) — deferred tech-debt log.
 
 ## Learn more
 
