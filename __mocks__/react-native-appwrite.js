@@ -57,6 +57,14 @@ module.exports = {
   },
   ID: { unique: jest.fn() },
   ImageGravity: { Top: 'top' },
+  Permission: {
+    read: jest.fn((role) => ({ operation: 'read', role })),
+    update: jest.fn((role) => ({ operation: 'update', role })),
+    delete: jest.fn((role) => ({ operation: 'delete', role })),
+  },
+  Role: {
+    user: jest.fn((userId) => `role:user:${userId}`),
+  },
   // Expose the singleton instances so tests can drive their methods.
   __account: accountInstance,
   __database: databaseInstance,
