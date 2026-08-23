@@ -28,6 +28,8 @@ const databaseInstance = {
   listDocuments: jest.fn(),
   createDocument: jest.fn(),
   updateDocument: jest.fn(),
+  getDocument: jest.fn(),
+  deleteDocument: jest.fn(),
 };
 
 const storageInstance = {
@@ -56,6 +58,28 @@ module.exports = {
     search: jest.fn(),
   },
   ID: { unique: jest.fn() },
+  Permission: {
+    read: jest.fn((role) => `read("${role}")`),
+    write: jest.fn((role) => `write("${role}")`),
+    create: jest.fn((role) => `create("${role}")`),
+    update: jest.fn((role) => `update("${role}")`),
+    delete: jest.fn((role) => `delete("${role}")`),
+  },
+  Role: {
+    any: jest.fn(() => 'any'),
+    user: jest.fn((id, status = '') =>
+      status === '' ? `user:${id}` : `user:${id}/${status}`
+    ),
+    users: jest.fn((status = '') =>
+      status === '' ? 'users' : `users/${status}`
+    ),
+    guests: jest.fn(() => 'guests'),
+    team: jest.fn((id, role = '') =>
+      role === '' ? `team:${id}` : `team:${id}/${role}`
+    ),
+    member: jest.fn((id) => `member:${id}`),
+    label: jest.fn((name) => `label:${name}`),
+  },
   ImageGravity: { Top: 'top' },
   Permission: {
     read: jest.fn((role) => ({ operation: 'read', role })),
