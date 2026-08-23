@@ -40,6 +40,7 @@ import type * as TestRendererNS from 'react-test-renderer';
 import SignIn from '../(auth)/sign-in';
 import { FormField } from '@/components/FormField';
 import { GreenLoading } from '@/components/Loading/Loading';
+import { User, UserContext } from '@/store/user';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Link, router } = require('expo-router');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -49,10 +50,14 @@ const { useAppwrite } = require('@/hooks/useAppwrite');
 
 let lastRenderer: TestRendererNS.ReactTestRenderer | null = null;
 
-function render() {
+function render(user: User = new User()) {
   let renderer!: TestRendererNS.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(<SignIn />);
+    renderer = TestRenderer.create(
+      <UserContext.Provider value={user}>
+        <SignIn />
+      </UserContext.Provider>
+    );
   });
   lastRenderer = renderer;
   return renderer;
@@ -129,6 +134,22 @@ describe('app/(auth)/sign-in', () => {
     render();
     expect(signIn).not.toHaveBeenCalled();
     expect(getCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it('redirects to /home on mount when the user is already logged in', () => {
+    const loggedInUser = new User();
+    loggedInUser.login({
+      session: { $id: 'user-1', isLoggedIn: true },
+      email: 'user@example.com',
+      userName: 'user@example.com',
+      avatar: 'https://avatar',
+    });
+
+    render(loggedInUser);
+
+    expect(signIn).not.toHaveBeenCalled();
+    expect(getCurrentUser).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith('/home');
   });
 
   it('updates the Email FormField value when its handleChangeText fires', () => {

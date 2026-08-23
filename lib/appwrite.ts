@@ -132,6 +132,28 @@ function isUnauthenticatedError(error: Error): boolean {
   );
 }
 
+async function clearActiveSessionIfPresent(): Promise<void> {
+  try {
+    await account.get();
+    // An active session exists; remove it before creating a new one.
+    try {
+      await account.deleteSession('current');
+    } catch (deleteError: unknown) {
+      // Swallow deletion errors: the session may already be invalid or gone.
+      const err = ensureError(deleteError);
+      console.warn(
+        'Failed to delete existing session before sign-in:',
+        err.message
+      );
+    }
+  } catch (error: unknown) {
+    const err = ensureError(error);
+    if (!isUnauthenticatedError(err)) {
+      throw new Error(err.message);
+    }
+  }
+}
+
 export const signIn: SignInFunction = async (email, password) => {
   const emailResult = validateEmail(email);
   if (!emailResult.valid) {
@@ -143,6 +165,8 @@ export const signIn: SignInFunction = async (email, password) => {
   }
 
   try {
+    await clearActiveSessionIfPresent();
+
     const session = await account.createEmailPasswordSession(
       emailResult.value,
       password
