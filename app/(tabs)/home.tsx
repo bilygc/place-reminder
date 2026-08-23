@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { images, icons } from '@/constants';
 import { FlatList, TouchableOpacity, Image } from 'react-native';
 import { View, Text } from 'react-native';
@@ -13,9 +13,17 @@ import Animated, {
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import CardReminder from '@/components/CardReminder/CardReminder';
+import ReminderLocationModal from '@/components/ReminderLocationModal';
+import { UserContext } from '@/store/user';
+import { isDescriptionValid } from '@/utils/validateReminder';
 
 const Home = () => {
   const [reminder, setReminder] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const user = useContext(UserContext);
+  // User keeps _session private; this is the established access pattern in the app.
+  const userId = (user as unknown as { _session?: { $id: string } } | null)?._session?.$id ?? '';
+  const isValid = isDescriptionValid(reminder);
   // const {
   //   addLocationReminder,
   //   removeLocationReminder,
@@ -55,7 +63,9 @@ const Home = () => {
   };
 
   const handleButton = () => {
-    console.log('Reminder added');
+    if (isValid) {
+      setIsModalVisible(true);
+    }
   };
 
   return (
@@ -121,23 +131,30 @@ const Home = () => {
                     handleChangeText={handleChangeText}
                     inputStyles="rounded-full"
                   />
+                  {!isValid && reminder.length > 0 && (
+                    <Text className="text-light text-sm font-inmedium text-center mt-1">
+                      Please enter a valid description.
+                    </Text>
+                  )}
                 </View>
                 <View className="flex-row gap-x-3">
                   <View className="flex-grow max-w-[280px]">
                     <CustomButton
                       title="Add reminder"
                       handlePress={handleButton}
+                      isLoading={!isValid}
                       textStyles="text-white"
                     />
                   </View>
                   <View className="flex-none w-[47px] h-[47px]">
                     <TouchableOpacity
-                      onPress={() => console.log('mic pressed')}
                       activeOpacity={0.7}
                       className={
-                        'bg-secondary rounded-full justify-center items-center px-8 py-6'
+                        'bg-secondary rounded-full justify-center items-center px-8 py-6 opacity-50'
                       }
-                      disabled={false}
+                      disabled={true}
+                      accessibilityLabel="Microphone, unavailable"
+                      accessibilityState={{ disabled: true }}
                     >
                       <Image source={icons.mic} resizeMode="contain" />
                     </TouchableOpacity>
@@ -160,6 +177,19 @@ const Home = () => {
           </View>
         )}
       />
+      {isModalVisible && (
+        <ReminderLocationModal
+          key={String(isModalVisible)}
+          visible={true}
+          description={reminder}
+          userId={userId}
+          onClose={() => setIsModalVisible(false)}
+          onCreated={() => {
+            setReminder('');
+            setIsModalVisible(false);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
