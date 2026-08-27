@@ -223,11 +223,11 @@ Collection: `reminders` (`config.reminderCollectionId`, env `EXPO_PUBLIC_REMINDE
 ### `react-native-maps@1.27.2`
 
 - Added in ATO-12 for `MapPicker`. Provides `MapView` / `Marker` (see `__mocks__/react-native-maps.js` for the Jest mock).
-- **Requires a dev build / prebuild** — native maps do not run in Expo Go. Use `eas build --profile development` or `npx expo run:android` / `npx expo run:ios`. See `docs/location-tracking-guide.md` for the existing dev-build guidance and `app.json` permission setup.
-- **No Google Maps API key is configured yet.** When adding one, do **not** commit it in plaintext:
-  - Android: set via `app.json` / `app.config.js` `android.config.googleMaps.apiKey` sourced from `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` or an EAS secret, or via `eas.json` env.
-  - iOS: `ios.config.googleMapsApiKey` similarly.
-  - Prefer **EAS Secrets / EAS Build environment variables** (`eas secret:create`, referenced as `EXPO_PUBLIC_*` at build time) over checking keys into the repo. Rotate any accidentally committed key immediately.
+- **Expo Go support** — `react-native-maps` is bundled in Expo Go on SDK 57, so `MapPicker` renders during development without a custom dev build. A development build is only required if you add native config not supported in Expo Go.
+- **Google Maps API key configuration** — the key is configured via the `react-native-maps` plugin in `app.json`, which reads `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` at build time:
+  - Android: `androidGoogleMapsApiKey` is set to `process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`.
+  - iOS: `iosGoogleMapsApiKey` is set to the same env var.
+  - **Do not commit the key in plaintext.** Keep it in `.env`. Because `.gitignore` excludes `.env`, EAS Build would normally omit it; repo-root `.easignore` mirrors `.gitignore` but intentionally includes `.env` so `EXPO_PUBLIC_*` client config reaches EAS builds. Rotate any accidentally committed key immediately.
 
 ### Expo SDK Alignment
 
