@@ -63,6 +63,7 @@ module.exports = {
   stopLocationUpdatesAsync: jest.fn(async () => undefined),
   startGeofencingAsync: jest.fn(async () => undefined),
   stopGeofencingAsync: jest.fn(async () => undefined),
+  reverseGeocodeAsync: jest.fn(async () => []),
   hasServicesEnabledAsync: jest.fn(async () => true),
 
   Accuracy,

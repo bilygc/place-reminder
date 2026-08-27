@@ -1,5 +1,30 @@
 import { Models } from 'react-native-appwrite';
 
+export type LocationSource = 'current' | 'map';
+
+export type CreateReminderInput = {
+  description: string; // non-empty, ≤500 chars (validate before calling)
+  latitude: number; // -90..90
+  longitude: number; // -180..180
+  locationSource: LocationSource;
+  locationLabel?: string; // reverse-geocoded label, ≤255 chars
+  userId: string; // owner (Appwrite account $id)
+  active?: boolean; // defaults to true
+};
+
+export type Reminder = {
+  $id: string;
+  userId: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  locationSource: LocationSource;
+  locationLabel?: string | null;
+  active: boolean;
+  $createdAt: string;
+  $updatedAt: string;
+};
+
 export interface UserCredentials {
   email: string;
   password: string;
@@ -82,3 +107,9 @@ export type BookmarkVideoFunction = (
   bookmarkData: string[],
   isBookmarked: boolean
 ) => BookmarkVideoResponse;
+
+export type CreateReminderResponse = Promise<Reminder>;
+
+export type CreateReminderFunction = (
+  input: CreateReminderInput
+) => CreateReminderResponse;

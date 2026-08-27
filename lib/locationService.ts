@@ -343,4 +343,67 @@ const LocationService = {
   },
 };
 
+/**
+ * Error thrown when the user denies foreground location permission during
+ * the create-reminder flow. Callers should show an inline error and keep the
+ * popup open rather than sending the user to Settings.
+ */
+export class LocationPermissionDeniedError extends Error {}
+
+/**
+ * Build a concise human-readable label from a reverse-geocoded address.
+ * Prefers "Street, City" but falls back to whatever combination is available.
+ */
+function buildLocationLabel(
+  address: Location.LocationGeocodedAddress
+): string {
+  const parts: string[] = [];
+  if (address.street) parts.push(address.street);
+  if (address.city) parts.push(address.city);
+  if (address.region) parts.push(address.region);
+  if (address.country) parts.push(address.country);
+
+  const unique = parts.filter(
+    (value, index, self) => self.indexOf(value) === index
+  );
+  return unique.slice(0, 2).join(', ');
+}
+
+/**
+ * Request foreground location permission, fetch the current position, and
+ * attempt to reverse-geocode it into a label.
+ *
+ * - Permission denied → throws LocationPermissionDeniedError.
+ * - Geocoding fails or returns nothing → returns label: null; the caller can
+ *   fall back to raw coordinates.
+ */
+export async function getCurrentLocationWithLabel(): Promise<{
+  latitude: number;
+  longitude: number;
+  label: string | null;
+}> {
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') {
+    throw new LocationPermissionDeniedError();
+  }
+
+  const position = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.Balanced,
+  });
+
+  const { latitude, longitude } = position.coords;
+
+  try {
+    const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+    const first = geocode?.[0];
+    if (!first) {
+      return { latitude, longitude, label: null };
+    }
+    const label = buildLocationLabel(first);
+    return { latitude, longitude, label };
+  } catch {
+    return { latitude, longitude, label: null };
+  }
+}
+
 export default LocationService;
