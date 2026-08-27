@@ -7,12 +7,19 @@ import {
   Query,
   Storage,
   ImageGravity,
+  Permission,
+  Role,
 } from 'react-native-appwrite';
 
 import get from 'lodash/get';
 
 import ensureError from '@/utils/ensureError';
 import { validateEmail } from '@/utils/validateEmail';
+import {
+  isDescriptionValid,
+  isLocationValid,
+  LOCATION_LABEL_MAX_LENGTH,
+} from '@/utils/validateReminder';
 
 import type {
   CreateUserFunction,
@@ -30,6 +37,10 @@ import type {
   BookmarkVideoFunction,
   // FileAsset,
   // VideoPost,
+  CreateReminderFunction,
+  CreateReminderInput,
+  Reminder,
+  LocationSource,
 } from './appwrite.types';
 
 function requireEnv(name: string, value: string | undefined): string {
@@ -122,6 +133,84 @@ export const createUser: CreateUserFunction = async (
     throw new Error(err.message);
   }
 };
+
+export const createReminder: CreateReminderFunction = async (input) => {
+  if (!isDescriptionValid(input.description)) {
+    throw new Error(
+      'Invalid reminder: description must be non-empty and 500 characters or fewer'
+    );
+  }
+
+  if (!isLocationValid(input.latitude, input.longitude)) {
+    throw new Error(
+      'Invalid reminder: latitude must be between -90 and 90 and longitude between -180 and 180'
+    );
+  }
+
+  if (!input.userId || input.userId.trim() === '') {
+    throw new Error('Invalid reminder: userId is required');
+  }
+
+  const validSources: LocationSource[] = ['current', 'map'];
+  if (!validSources.includes(input.locationSource)) {
+    throw new Error(
+      'Invalid reminder: locationSource must be "current" or "map"'
+    );
+  }
+
+  if (
+    input.locationLabel !== undefined &&
+    input.locationLabel !== null &&
+    (typeof input.locationLabel !== 'string' ||
+      input.locationLabel.length > LOCATION_LABEL_MAX_LENGTH)
+  ) {
+    throw new Error(
+      'Invalid reminder: locationLabel must be 255 characters or fewer'
+    );
+  }
+
+  try {
+    const data: {
+      userId: string;
+      description: string;
+      latitude: number;
+      longitude: number;
+      locationSource: LocationSource;
+      active: boolean;
+      locationLabel?: string;
+    } = {
+      userId: input.userId,
+      description: input.description.trim(),
+      latitude: input.latitude,
+      longitude: input.longitude,
+      locationSource: input.locationSource,
+      active: input.active ?? true,
+    };
+
+    if (input.locationLabel !== undefined && input.locationLabel !== null) {
+      data.locationLabel = input.locationLabel;
+    }
+
+    const newReminder = (await database.createDocument(
+      config.databaseId,
+      config.reminderCollectionId,
+      ID.unique(),
+      data,
+      [
+        Permission.read(Role.user(input.userId)),
+        Permission.update(Role.user(input.userId)),
+        Permission.delete(Role.user(input.userId)),
+      ]
+    )) as unknown as Reminder;
+
+    return newReminder;
+  } catch (error: unknown) {
+    const err = ensureError(error);
+    console.error(err.message);
+    throw new Error(err.message);
+  }
+};
+
 function isUnauthenticatedError(error: Error): boolean {
   const message = error.message.toLowerCase();
   return (
