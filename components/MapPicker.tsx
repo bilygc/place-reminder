@@ -3,18 +3,41 @@ import { View, Text } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import CustomButton from '@/components/CustomButton';
 
+interface MapPickerRegion {
+  latitude: number;
+  longitude: number;
+  latitudeDelta?: number;
+  longitudeDelta?: number;
+}
+
 interface MapPickerProps {
   onConfirm: (location: { latitude: number; longitude: number }) => void;
   onCancel: () => void;
+  initialRegion?: MapPickerRegion;
 }
 
-const MapPicker = ({ onConfirm, onCancel }: MapPickerProps) => {
+const DEFAULT_REGION: Required<MapPickerRegion> = {
+  latitude: 37.78825,
+  longitude: -122.4324,
+  latitudeDelta: 0.0922,
+  longitudeDelta: 0.0421,
+};
+
+const MapPicker = ({ onConfirm, onCancel, initialRegion = DEFAULT_REGION }: MapPickerProps) => {
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  const region: Required<MapPickerRegion> = {
+    latitude: initialRegion.latitude,
+    longitude: initialRegion.longitude,
+    latitudeDelta: initialRegion.latitudeDelta ?? DEFAULT_REGION.latitudeDelta,
+    longitudeDelta: initialRegion.longitudeDelta ?? DEFAULT_REGION.longitudeDelta,
+  };
 
   return (
     <View className="flex-1 bg-background">
       <MapView
         className="flex-1"
+        initialRegion={region}
         onPress={(e) => setPin(e.nativeEvent.coordinate)}
       >
         {pin && (
