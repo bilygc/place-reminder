@@ -12,7 +12,7 @@ Home-screen flow that lets a signed-in user type a description, pick a location,
 
 3. **Location popup** — `ReminderLocationModal` in a `Modal` (`animationType="slide"`). Conditionally rendered from `home.tsx` (`{isModalVisible && <ReminderLocationModal key={String(isModalVisible)} ... />}`) so it remounts fresh on every open. Title: _"Where do you want to be reminded?"_
 
-   - **Use current location** — calls `getCurrentLocationWithLabel()`. On success, shows a preview chip with the reverse-geocoded label or `lat, lng` fallback (`toFixed(4)`). On foreground-permission denial, shows inline text _"Location permission denied. Please enable location services and try again."_ and keeps the popup open (no `Alert`, no navigation to Settings). Other GPS errors show _"Could not get your location. Please try again."_
+   - **Use current location** — calls `getCurrentLocationWithLabel()`. On success, shows a preview chip with the reverse-geocoded label or `lat, lng` fallback (`toFixed(4)`). On foreground-permission denial, throws `LocationPermissionDeniedError` and the modal shows inline text _"Location permission denied. Please enable location services and try again."_, keeping the popup open (no `Alert`, no navigation to Settings). When the device cannot retrieve a position (e.g. location services disabled / `E_LOCATION_UNAVAILABLE`), throws `LocationUnavailableError` and the modal shows _"Location unavailable — make sure location services are enabled"_. Other unexpected errors show _"Could not get your location. Please try again."_
    - **Select on map** — switches inline to `MapPicker`. User taps to drop a pin, drags to adjust. **Confirm** stays disabled until a pin is placed (no default location). `Cancel` in the picker returns to the location-choice view without discarding the description.
 
 4. **Cancel / Back** — `Cancel` in the modal calls `onClose` (`setIsModalVisible(false)`). The typed description in `home.tsx` is preserved.
@@ -224,10 +224,12 @@ Collection: `reminders` (`config.reminderCollectionId`, env `EXPO_PUBLIC_REMINDE
 
 - Added in ATO-12 for `MapPicker`. Provides `MapView` / `Marker` (see `__mocks__/react-native-maps.js` for the Jest mock).
 - **Expo Go support** — `react-native-maps` is bundled in Expo Go on SDK 57, so `MapPicker` renders during development without a custom dev build. A development build is only required if you add native config not supported in Expo Go.
-- **Google Maps API key configuration** — the key is configured via the `react-native-maps` plugin in `app.json`, which reads `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` at build time:
-  - Android: `androidGoogleMapsApiKey` is set to `process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`.
-  - iOS: `iosGoogleMapsApiKey` is set to the same env var.
-  - **Do not commit the key in plaintext.** Keep it in `.env`. Because `.gitignore` excludes `.env`, EAS Build would normally omit it; repo-root `.easignore` mirrors `.gitignore` but intentionally includes `.env` so `EXPO_PUBLIC_*` client config reaches EAS builds. Rotate any accidentally committed key immediately.
+- **Google Maps API key configuration** — the key comes from env via `app.config.js`, is not committed, and must be restricted in Google Cloud:
+  - `app.config.js` reads `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` at config-resolution time and injects it into the `react-native-maps` plugin config as `androidGoogleMapsApiKey` / `iosGoogleMapsApiKey` (the static `app.json` plugin entry is intentionally empty). If the var is missing or empty, config resolution throws a clear error telling you to set it in `.env` or EAS secrets.
+  - Android: `androidGoogleMapsApiKey` comes from the env var (surfaces in `AndroidManifest.xml` as `com.google.android.geo.API_KEY` after prebuild).
+  - iOS: `iosGoogleMapsApiKey` comes from the same env var.
+  - **Do not commit the key in plaintext.** Keep it in `.env` (gitignored). Because `.gitignore` excludes `.env`, EAS Build would normally omit it; repo-root `.easignore` mirrors `.gitignore` but intentionally includes `.env` so `EXPO_PUBLIC_*` client config reaches EAS builds — otherwise set it via EAS secrets. Rotate any accidentally committed key immediately.
+  - **Google Cloud hardening (console work):** restrict the key to the Android app (`com.myatomikappz.placereminder` + SHA-1), set daily quotas, and add a budget alert.
 
 ### Expo SDK Alignment
 
@@ -246,7 +248,7 @@ npm test        # jest --ci (preset jest-expo, setup jest.setup.js)
 | Suite | What it covers |
 |-------|----------------|
 | `lib/__tests__/createReminder.test.ts` | Success path (correct `databaseId`/`collectionId`/`ID.unique()` and allowlisted payload, three per-document permissions, `locationLabel` inclusion/omission, `active` default/override), validation rejections before any SDK call (empty/whitespace description, >500 chars, out-of-range lat/lng, empty `userId`, invalid `locationSource`, >255 label), SDK error propagation. Mocks `react-native-appwrite` via `__database`/`Permission`/`Role`/`ID` test doubles. |
-| `lib/__tests__/locationService.reminder.test.ts` | `LocationPermissionDeniedError` is an `Error` subclass; `getCurrentLocationWithLabel` happy path (foreground grant → `getCurrentPositionAsync` with `Accuracy.Balanced` → `reverseGeocodeAsync` → `"Street, City"` label), permission-denied throw without calling position/geocode, `label: null` on empty geocode array, `label: null` on `reverseGeocodeAsync` throw. Mocks `expo-location`. |
+| `lib/__tests__/locationService.reminder.test.ts` | `LocationPermissionDeniedError` / `LocationUnavailableError` are `Error` subclasses; `getCurrentLocationWithLabel` happy path (foreground grant → `getCurrentPositionAsync` with `Accuracy.Balanced` → `reverseGeocodeAsync` → `"Street, City"` label), permission-denied throw without calling position/geocode, `label: null` on empty geocode array, `label: null` on `reverseGeocodeAsync` throw, `LocationUnavailableError` thrown (with friendly message) when `getCurrentPositionAsync` rejects with `E_LOCATION_UNAVAILABLE` or any other error. Mocks `expo-location`. |
 | `utils/__tests__/validateReminder.test.ts` | `isDescriptionValid` (normal, empty, whitespace-only, exactly 500, 501, trim-before-measure) and `isLocationValid` (boundary pairs, out-of-range lat/lng, non-finite, non-number). |
 
 **Mock file:**
@@ -272,6 +274,6 @@ npm test        # jest --ci (preset jest-expo, setup jest.setup.js)
 | `components/MapPicker.tsx` | Map pin picker (react-native-maps) |
 | `lib/appwrite.ts` | `createReminder` — validation, allowlisted write, owner-scoped permissions |
 | `lib/appwrite.types.ts` | `LocationSource`, `CreateReminderInput`, `Reminder` |
-| `lib/locationService.ts` | `LocationPermissionDeniedError`, `getCurrentLocationWithLabel` |
+| `lib/locationService.ts` | `LocationPermissionDeniedError`, `LocationUnavailableError`, `getCurrentLocationWithLabel` |
 | `utils/validateReminder.ts` | `isDescriptionValid`, `isLocationValid`, length constants |
 | `__mocks__/react-native-maps.js` | Jest manual mock for native maps |
