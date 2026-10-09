@@ -30,6 +30,10 @@ jest.mock('expo-location');
 jest.mock('expo-task-manager');
 
 import type { LocationRegion } from '../locationService';
+import {
+  LOCATION_NO_FIX_MESSAGE,
+  LOCATION_SERVICES_DISABLED_MESSAGE,
+} from '../locationService';
 
 type LocationModule = typeof import('expo-location');
 type TaskManagerModule = typeof import('expo-task-manager');
@@ -51,6 +55,8 @@ interface LocationMock
     | 'requestForegroundPermissionsAsync'
     | 'requestBackgroundPermissionsAsync'
     | 'getCurrentPositionAsync'
+    | 'getLastKnownPositionAsync'
+    | 'reverseGeocodeAsync'
     | 'startLocationUpdatesAsync'
     | 'stopLocationUpdatesAsync'
     | 'startGeofencingAsync'
@@ -60,6 +66,8 @@ interface LocationMock
   requestForegroundPermissionsAsync: jest.Mock;
   requestBackgroundPermissionsAsync: jest.Mock;
   getCurrentPositionAsync: jest.Mock;
+  getLastKnownPositionAsync: jest.Mock;
+  reverseGeocodeAsync: jest.Mock;
   startLocationUpdatesAsync: jest.Mock;
   stopLocationUpdatesAsync: jest.Mock;
   startGeofencingAsync: jest.Mock;
@@ -263,27 +271,40 @@ describe('locationService', () => {
       expect(state.location).toBeNull();
     });
 
-    it('records an error message (but does not throw) when getCurrentPositionAsync rejects', async () => {
-      const { service, locationMock } = loadService();
-      locationMock.requestForegroundPermissionsAsync.mockResolvedValue({
-        status: 'granted',
-        granted: true,
-        expires: 'never',
-      });
-      locationMock.requestBackgroundPermissionsAsync.mockResolvedValue({
-        status: 'granted',
-        granted: true,
-        expires: 'never',
-      });
-      locationMock.getCurrentPositionAsync.mockRejectedValue(
-        new Error('gps unavailable')
-      );
+    it('records a no-fix error (but does not throw) when retries and the last-known fallback all fail', async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, locationMock } = loadService();
+        locationMock.requestForegroundPermissionsAsync.mockResolvedValue({
+          status: 'granted',
+          granted: true,
+          expires: 'never',
+        });
+        locationMock.requestBackgroundPermissionsAsync.mockResolvedValue({
+          status: 'granted',
+          granted: true,
+          expires: 'never',
+        });
+        locationMock.getCurrentPositionAsync.mockRejectedValue(
+          new Error('gps unavailable')
+        );
+        locationMock.getLastKnownPositionAsync.mockResolvedValue(null);
 
-      const state = await service.init();
+        const initPromise = service.init();
+        await jest.advanceTimersByTimeAsync(10000);
+        const state = await initPromise;
 
-      expect(state.errorMsg).toBe('Error getting current location');
-      expect(state.location).toBeNull();
-      expect(consoleErrorSpy).toHaveBeenCalled();
+        // 1 initial attempt + 2 bounded retries, then the fallback.
+        expect(locationMock.getCurrentPositionAsync).toHaveBeenCalledTimes(3);
+        expect(locationMock.getLastKnownPositionAsync).toHaveBeenCalledWith({
+          maxAge: 60000,
+        });
+        expect(state.errorMsg).toBe(LOCATION_NO_FIX_MESSAGE);
+        expect(state.location).toBeNull();
+        expect(consoleErrorSpy).toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('logs permission statuses under __DEV__ (console.log called twice)', async () => {
@@ -304,6 +325,127 @@ describe('locationService', () => {
 
       // One log for foreground status, one for background status.
       expect(consoleLogSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('init() service check / retry / fallback', () => {
+    async function grantPermissions(locationMock: LocationMock) {
+      locationMock.requestForegroundPermissionsAsync.mockResolvedValue({
+        status: 'granted',
+        granted: true,
+        expires: 'never',
+      });
+      locationMock.requestBackgroundPermissionsAsync.mockResolvedValue({
+        status: 'granted',
+        granted: true,
+        expires: 'never',
+      });
+    }
+
+    it('does not attempt a fetch when location services are disabled', async () => {
+      const { service, locationMock } = loadService();
+      await grantPermissions(locationMock);
+      locationMock.hasServicesEnabledAsync.mockResolvedValue(false);
+
+      const state = await service.init();
+
+      expect(locationMock.hasServicesEnabledAsync).toHaveBeenCalled();
+      expect(locationMock.getCurrentPositionAsync).not.toHaveBeenCalled();
+      expect(locationMock.getLastKnownPositionAsync).not.toHaveBeenCalled();
+      expect(state.location).toBeNull();
+      expect(state.errorMsg).toBe(LOCATION_SERVICES_DISABLED_MESSAGE);
+    });
+
+    it('retries getCurrentPositionAsync on a transient failure then succeeds without the fallback', async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, locationMock } = loadService();
+        await grantPermissions(locationMock);
+        locationMock.getCurrentPositionAsync
+          .mockRejectedValueOnce(new Error('no fix yet'))
+          .mockResolvedValueOnce(sampleLocation);
+
+        const initPromise = service.init();
+        await jest.advanceTimersByTimeAsync(5000);
+        const state = await initPromise;
+
+        expect(locationMock.getCurrentPositionAsync).toHaveBeenCalledTimes(2);
+        expect(
+          locationMock.getLastKnownPositionAsync
+        ).not.toHaveBeenCalled();
+        expect(state.location).toBe(sampleLocation);
+        expect(state.errorMsg).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('uses High accuracy for the position fetch on android (Balanced maps to PRIORITY_BALANCED_POWER_ACCURACY, which never resolves on emulators)', async () => {
+      const { service, locationMock, Platform } = loadService();
+      await grantPermissions(locationMock);
+      locationMock.getCurrentPositionAsync.mockResolvedValue(sampleLocation);
+      // Mutate the same Platform object locationService captured (single
+      // shared registry — see file header) to exercise the android branch.
+      Platform.OS = 'android';
+      try {
+        const state = await service.init();
+
+        expect(locationMock.getCurrentPositionAsync).toHaveBeenCalledWith({
+          accuracy: locationMock.Accuracy.High,
+        });
+        expect(state.location).toBe(sampleLocation);
+        expect(state.errorMsg).toBeNull();
+      } finally {
+        Platform.OS = 'ios';
+      }
+    });
+
+    it('falls back to the last-known position when all fetch retries fail', async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, locationMock } = loadService();
+        await grantPermissions(locationMock);
+        locationMock.getCurrentPositionAsync.mockRejectedValue(
+          new Error('Current location is unavailable.')
+        );
+        locationMock.getLastKnownPositionAsync.mockResolvedValue(sampleLocation);
+
+        const initPromise = service.init();
+        await jest.advanceTimersByTimeAsync(10000);
+        const state = await initPromise;
+
+        expect(locationMock.getCurrentPositionAsync).toHaveBeenCalledTimes(3);
+        expect(locationMock.getLastKnownPositionAsync).toHaveBeenCalledWith({
+          maxAge: 60000,
+        });
+        expect(state.location).toBe(sampleLocation);
+        expect(state.errorMsg).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('treats a throwing last-known lookup as failure (surfaces the no-fix error)', async () => {
+      jest.useFakeTimers();
+      try {
+        const { service, locationMock } = loadService();
+        await grantPermissions(locationMock);
+        locationMock.getCurrentPositionAsync.mockRejectedValue(
+          new Error('gps unavailable')
+        );
+        locationMock.getLastKnownPositionAsync.mockRejectedValue(
+          new Error('no cached fix')
+        );
+
+        const initPromise = service.init();
+        await jest.advanceTimersByTimeAsync(10000);
+        const state = await initPromise;
+
+        expect(state.errorMsg).toBe(LOCATION_NO_FIX_MESSAGE);
+        expect(state.location).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

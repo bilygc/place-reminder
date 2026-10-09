@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomButton from '@/components/CustomButton';
 import MapPicker from '@/components/MapPicker';
 import { createReminder } from '@/lib/appwrite';
 import type { LocationSource } from '@/lib/appwrite.types';
-import {
+import LocationService, {
   getCurrentLocationWithLabel,
   LocationPermissionDeniedError,
+  LocationUnavailableError,
 } from '@/lib/locationService';
 
 interface ReminderLocationModalProps {
@@ -17,6 +18,19 @@ interface ReminderLocationModalProps {
   onClose: () => void;
   onCreated: () => void;
 }
+
+interface MapRegion {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
+
+// Same zoom as MapPicker's SF DEFAULT_REGION; only the center changes.
+const MAP_REGION_DELTAS = {
+  latitudeDelta: 0.0922,
+  longitudeDelta: 0.0421,
+};
 
 const ReminderLocationModal = ({
   visible,
@@ -34,6 +48,31 @@ const ReminderLocationModal = ({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selectingOnMap, setSelectingOnMap] = useState(false);
+  const [mapInitialRegion, setMapInitialRegion] = useState<MapRegion | undefined>(
+    undefined
+  );
+
+  // Center the map picker on the device's current location. Reads the cached
+  // fix from LocationService (no extra permission prompt or reverse-geocode);
+  // a fix arriving while the modal is open re-centers via the subscription.
+  // When no fix is cached yet, mapInitialRegion stays undefined and MapPicker
+  // falls back to its SF default region.
+  useEffect(() => {
+    if (!visible) return;
+
+    const toRegion = (coords: { latitude: number; longitude: number }): MapRegion => ({
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      ...MAP_REGION_DELTAS,
+    });
+
+    const cached = LocationService.getState()?.location?.coords;
+    setMapInitialRegion(cached ? toRegion(cached) : undefined);
+
+    return LocationService.onLocationUpdate((location) => {
+      setMapInitialRegion(toRegion(location.coords));
+    });
+  }, [visible]);
 
   const handleUseCurrentLocation = async () => {
     setError(null);
@@ -46,7 +85,12 @@ const ReminderLocationModal = ({
         err instanceof LocationPermissionDeniedError ||
         (err as Error)?.name === 'LocationPermissionDeniedError'
       ) {
-        setError('Location permission denied. Please enable location services and try again.');
+        setError('Location permission denied. Please grant location permission in Settings and try again.');
+      } else if (
+        err instanceof LocationUnavailableError ||
+        (err as Error)?.name === 'LocationUnavailableError'
+      ) {
+        setError((err as Error).message);
       } else {
         setError('Could not get your location. Please try again.');
       }
@@ -90,6 +134,7 @@ const ReminderLocationModal = ({
           <MapPicker
             onConfirm={handleMapConfirm}
             onCancel={() => setSelectingOnMap(false)}
+            initialRegion={mapInitialRegion}
           />
         ) : (
           <View className="flex-1 p-6 justify-center">

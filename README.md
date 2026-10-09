@@ -41,7 +41,7 @@ npm test
 
 Runs the Jest unit test suite in CI mode (`jest --ci`, preset `jest-expo`). Baseline after ATO-12: **366 tests / 33 suites green**.
 
-New coverage includes the create-reminder flow: `lib/__tests__/createReminder.test.ts` (owner-scoped `createReminder` contract and validation), `lib/__tests__/locationService.reminder.test.ts` (`getCurrentLocationWithLabel` and `LocationPermissionDeniedError`), `utils/__tests__/validateReminder.test.ts` (description/location validation), and `__mocks__/react-native-maps.js` for `MapPicker` tests. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md) for details.
+New coverage includes the create-reminder flow: `lib/__tests__/createReminder.test.ts` (owner-scoped `createReminder` contract and validation), `lib/__tests__/locationService.reminder.test.ts` (`getCurrentLocationWithLabel`, `LocationPermissionDeniedError`, and `LocationUnavailableError`), `utils/__tests__/validateReminder.test.ts` (description/location validation), and `__mocks__/react-native-maps.js` for `MapPicker` tests. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md) for details.
 
 ## Get a fresh project
 
