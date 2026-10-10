@@ -8,6 +8,7 @@
     "scheme": "place-reminder",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.myatomikappz.placereminder",
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
@@ -64,10 +65,7 @@
       ],
       [
         "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": "process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY",
-          "iosGoogleMapsApiKey": "process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
-        }
+        {}
       ]
     ],
     "experiments": {

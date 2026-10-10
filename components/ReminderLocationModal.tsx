@@ -32,6 +32,12 @@ const MAP_REGION_DELTAS = {
   longitudeDelta: 0.0421,
 };
 
+const toRegion = (coords: { latitude: number; longitude: number }): MapRegion => ({
+  latitude: coords.latitude,
+  longitude: coords.longitude,
+  ...MAP_REGION_DELTAS,
+});
+
 const ReminderLocationModal = ({
   visible,
   description,
@@ -48,26 +54,21 @@ const ReminderLocationModal = ({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selectingOnMap, setSelectingOnMap] = useState(false);
+  // Center the map picker on the device's current location. The initial fix is
+  // read once from LocationService's cache when the modal mounts (no extra
+  // permission prompt or reverse-geocode); a fix arriving while the modal is
+  // open re-centers via the subscription below. When no fix is cached yet,
+  // mapInitialRegion stays undefined and MapPicker falls back to its SF default
+  // region.
   const [mapInitialRegion, setMapInitialRegion] = useState<MapRegion | undefined>(
-    undefined
+    () => {
+      const cached = LocationService.getState()?.location?.coords;
+      return cached ? toRegion(cached) : undefined;
+    }
   );
 
-  // Center the map picker on the device's current location. Reads the cached
-  // fix from LocationService (no extra permission prompt or reverse-geocode);
-  // a fix arriving while the modal is open re-centers via the subscription.
-  // When no fix is cached yet, mapInitialRegion stays undefined and MapPicker
-  // falls back to its SF default region.
   useEffect(() => {
     if (!visible) return;
-
-    const toRegion = (coords: { latitude: number; longitude: number }): MapRegion => ({
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-      ...MAP_REGION_DELTAS,
-    });
-
-    const cached = LocationService.getState()?.location?.coords;
-    setMapInitialRegion(cached ? toRegion(cached) : undefined);
 
     return LocationService.onLocationUpdate((location) => {
       setMapInitialRegion(toRegion(location.coords));
