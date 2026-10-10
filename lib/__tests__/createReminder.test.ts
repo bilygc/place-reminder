@@ -21,6 +21,7 @@ jest.mock('react-native-appwrite');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appwriteModule = require('react-native-appwrite');
 const databaseInstance = appwriteModule.__database;
+const accountInstance = appwriteModule.__account;
 const ID = appwriteModule.ID;
 const Permission = appwriteModule.Permission;
 const Role = appwriteModule.Role;
@@ -55,6 +56,9 @@ describe('createReminder', () => {
     jest.clearAllMocks();
     ID.unique.mockReturnValue('gen-id');
     databaseInstance.createDocument.mockReset();
+    accountInstance.get.mockReset();
+    // Default session matches validInput.userId so the cross-check passes.
+    accountInstance.get.mockResolvedValue({ $id: 'user-123' });
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -173,12 +177,14 @@ describe('createReminder', () => {
     expect(databaseInstance.createDocument).not.toHaveBeenCalled();
   });
 
-  it('rejects an empty userId', async () => {
-    await expect(
-      createReminder({ ...validInput, userId: '' })
-    ).rejects.toThrow(/userId/i);
+  it('falls back to the session id when caller userId is empty', async () => {
+    databaseInstance.createDocument.mockResolvedValue(mockReminder);
 
-    expect(databaseInstance.createDocument).not.toHaveBeenCalled();
+    await createReminder({ ...validInput, userId: '' });
+
+    const data = databaseInstance.createDocument.mock.calls[0][3];
+    expect(data.userId).toBe('user-123');
+    expect(Role.user).toHaveBeenCalledWith('user-123');
   });
 
   it('rejects an invalid locationSource', async () => {
@@ -206,5 +212,121 @@ describe('createReminder', () => {
       'Appwrite permission denied'
     );
     expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+});
+
+describe('createReminder session-derived ownership (ATO-12 permissions fix)', () => {
+  // Mirrors the user-reported runtime rejection: Appwrite only accepts
+  // permissions for the signed-in account id (e.g. user:6ac2c2be0018035a5d09).
+  // The owner must come from account.get(), never from caller input.
+  const SESSION_ID = '6ac2c2be0018035a5d09';
+
+  let consoleErrorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ID.unique.mockReturnValue('gen-id');
+    databaseInstance.createDocument.mockReset();
+    databaseInstance.createDocument.mockResolvedValue(mockReminder);
+    accountInstance.get.mockReset();
+    accountInstance.get.mockResolvedValue({ $id: SESSION_ID });
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('derives owner and permissions from the session when caller userId is empty', async () => {
+    const result = await createReminder({ ...validInput, userId: '' });
+
+    expect(accountInstance.get).toHaveBeenCalled();
+    const data = databaseInstance.createDocument.mock.calls[0][3];
+    expect(data.userId).toBe(SESSION_ID);
+    const permissions = databaseInstance.createDocument.mock.calls[0][4];
+    expect(permissions).toEqual([
+      { operation: 'read', role: `role:user:${SESSION_ID}` },
+      { operation: 'update', role: `role:user:${SESSION_ID}` },
+      { operation: 'delete', role: `role:user:${SESSION_ID}` },
+    ]);
+    expect(Role.user).toHaveBeenCalledWith(SESSION_ID);
+    expect(result).toBe(mockReminder);
+  });
+
+  it('derives owner and permissions from the session when caller userId is omitted', async () => {
+    const { userId: _dropped, ...withoutUserId } = validInput;
+
+    await createReminder(withoutUserId);
+
+    expect(accountInstance.get).toHaveBeenCalled();
+    const data = databaseInstance.createDocument.mock.calls[0][3];
+    expect(data.userId).toBe(SESSION_ID);
+    expect(Role.user).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it('rejects a caller userId that does not match the session without touching createDocument', async () => {
+    await expect(
+      createReminder({ ...validInput, userId: 'someone-else' })
+    ).rejects.toThrow(/match/i);
+
+    expect(databaseInstance.createDocument).not.toHaveBeenCalled();
+  });
+
+  it('throws a clear sign-in error (not the raw SDK error) when there is no active session', async () => {
+    accountInstance.get.mockRejectedValue(
+      new Error('User (role: guests) missing scope (account)')
+    );
+
+    await expect(createReminder({ ...validInput, userId: '' })).rejects.toThrow(
+      /no active session|sign in/i
+    );
+
+    expect(databaseInstance.createDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('createReminder id-space contract (account id vs document id)', () => {
+  // Production reality: the session (account) id and the user-collection
+  // document id are DIFFERENT values. The fixed store passes the account id
+  // (from userDoc.accountid) as the caller hint, so it must match the session
+  // and creation succeeds; the stale document id must still be rejected.
+  const ACCOUNT_ID = 'acct-1';
+  const DOCUMENT_ID = 'doc-1';
+
+  let consoleErrorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ID.unique.mockReturnValue('gen-id');
+    databaseInstance.createDocument.mockReset();
+    databaseInstance.createDocument.mockResolvedValue(mockReminder);
+    accountInstance.get.mockReset();
+    accountInstance.get.mockResolvedValue({ $id: ACCOUNT_ID });
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('SUCCEEDS when the caller passes the account id matching the session', async () => {
+    const result = await createReminder({
+      ...validInput,
+      userId: ACCOUNT_ID,
+    });
+
+    expect(databaseInstance.createDocument).toHaveBeenCalled();
+    const data = databaseInstance.createDocument.mock.calls[0][3];
+    expect(data.userId).toBe(ACCOUNT_ID);
+    expect(Role.user).toHaveBeenCalledWith(ACCOUNT_ID);
+    expect(result).toBe(mockReminder);
+  });
+
+  it('REJECTS the user-document id (wrong id space) without touching createDocument', async () => {
+    await expect(
+      createReminder({ ...validInput, userId: DOCUMENT_ID })
+    ).rejects.toThrow(/match/i);
+
+    expect(databaseInstance.createDocument).not.toHaveBeenCalled();
   });
 });

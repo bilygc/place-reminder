@@ -17,7 +17,7 @@ Home-screen flow that lets a signed-in user type a description, pick a location,
 
 4. **Cancel / Back** — `Cancel` in the modal calls `onClose` (`setIsModalVisible(false)`). The typed description in `home.tsx` is preserved.
 
-5. **Confirm (Add reminder inside the modal)** — enabled only after a location is chosen (`pendingLocation` + `locationSource` set). Calls `createReminder({ description, latitude, longitude, locationSource, locationLabel, userId, active: true })`. On success, `home.tsx` handles `onCreated`: clears `reminder` (`setReminder('')`) and closes the modal. On failure, shows inline _"Failed to create reminder. Please try again."_, leaves the modal open, and preserves all state for retry (`creating` resets in `finally`).
+5. **Confirm (Add reminder inside the modal)** — enabled only after a location is chosen (`pendingLocation` + `locationSource` set). Calls `createReminder({ description, latitude, longitude, locationSource, locationLabel, userId, active: true })` where `userId` is the store's session identity passed as a cross-check hint (ownership comes from the session). The store's session identity is the Appwrite **account** id: all three store-population paths (`sign-in.tsx`, `sign-up.tsx`, `components/Auth/Auth.tsx`) set `session.$id` from the user document's `accountid` field via `resolveSessionAccountId` (`lib/sessionIdentity.ts`), which throws a clear error when `accountid` is missing/empty instead of silently falling back to the document `$id` (a different id space that `createReminder`'s cross-check would reject). On success, `home.tsx` handles `onCreated`: clears `reminder` (`setReminder('')`) and closes the modal. On failure, the modal passes actionable `createReminder` messages through verbatim (anything starting with `Cannot create reminder:`, e.g. session expired while the modal was open) and shows the generic _"Failed to create reminder. Please try again."_ only for unknown errors — either way it leaves the modal open and preserves all state for retry (`creating` resets in `finally`).
 
 6. **Mic button** — circular button with `icons.mic` next to _Add reminder_. Rendered with `disabled={true}`, `className` includes `opacity-50`, `accessibilityLabel="Microphone, unavailable"` and `accessibilityState={{ disabled: true }}`. No-op by design (voice input is a future feature).
 
@@ -37,15 +37,15 @@ export const createReminder: (input: CreateReminderInput) => Promise<Reminder>
 - Validates client-side before any SDK call:
   - `description` — `isDescriptionValid` (trim non-empty, ≤500). Throws `Invalid reminder: description must be ...`.
   - `latitude`/`longitude` — `isLocationValid` (-90..90, -180..180). Throws `Invalid reminder: latitude must be ...`.
-  - `userId` — non-empty after trim. Throws `Invalid reminder: userId is required`.
   - `locationSource` — allowlisted to `['current','map']`. Throws `Invalid reminder: locationSource must be ...`.
   - `locationLabel` — when present, must be a string ≤255 chars. Throws `Invalid reminder: locationLabel must be ...`.
+- Derives the owner server-truthfully: `account.get()` → `ownerId` (the Appwrite account `$id`). Throws `Cannot create reminder: no active session. Please sign in and try again.` when there is no session. `input.userId` is an **optional cross-check only** — when present and non-empty it must equal the session id or `createReminder` throws `... does not match the signed-in user`; empty/omitted means "use the session id". Caller input is never used for permissions (this fixed the ATO-12 `Permissions must be one of: ...` rejection caused by passing a user-document id / `''` into `Role.user(...)`).
 - Trims `description` before writing.
 - Writes an allowlisted payload only (no spread):
 
   ```ts
   {
-    userId: input.userId,
+    userId: ownerId, // from account.get(), NOT input.userId
     description: input.description.trim(),
     latitude: input.latitude,
     longitude: input.longitude,
@@ -64,9 +64,9 @@ export const createReminder: (input: CreateReminderInput) => Promise<Reminder>
     ID.unique(),
     data,
     [
-      Permission.read(Role.user(input.userId)),
-      Permission.update(Role.user(input.userId)),
-      Permission.delete(Role.user(input.userId)),
+      Permission.read(Role.user(ownerId)),
+      Permission.update(Role.user(ownerId)),
+      Permission.delete(Role.user(ownerId)),
     ]
   )
   ```
@@ -84,7 +84,7 @@ export type CreateReminderInput = {
   longitude: number;          // -180..180
   locationSource: LocationSource;
   locationLabel?: string;     // reverse-geocoded label, ≤255 chars
-  userId: string;             // owner (Appwrite account $id)
+  userId?: string;            // optional cross-check only; owner is session-derived
   active?: boolean;           // defaults to true
 };
 
@@ -154,13 +154,13 @@ Location-choice modal shown after a valid description is entered. No `Alert` usa
 |------|------|----------|-------------|
 | `visible` | `boolean` | Yes | Controls `Modal visible`. Always `true` when conditionally rendered; `home.tsx` mounts/unmounts the component instead of toggling this alone. |
 | `description` | `string` | Yes | Trimmed description passed through to `createReminder`. |
-| `userId` | `string` | Yes | Owner id (`_session.$id` from `UserContext`). Used for both `createDocument` data and per-document permissions. |
+| `userId` | `string` | No | Cross-check hint: the store's session identity, which is the Appwrite **account** id (resolved from the user document's `accountid` via `resolveSessionAccountId`). `createReminder` ignores it for ownership unless it mismatches the session (then it throws). |
 | `onClose` | `() => void` | Yes | Called by **Cancel**. `home.tsx` sets `isModalVisible` to `false`; description is intentionally preserved. |
 | `onCreated` | `() => void` | Yes | Called on successful `createReminder`. `home.tsx` clears `reminder` and closes the modal. |
 
 **Internal state:** `pendingLocation` (`{latitude, longitude, label}` or `null`), `locationSource` (`LocationSource | null`), `error` (`string | null`, inline only), `creating` (`boolean`), `selectingOnMap` (`boolean`).
 
-**Behavior:** `handleUseCurrentLocation` catches `LocationPermissionDeniedError` (checked via `instanceof` and fallback `err.name` check) to show the permission-denied inline message. `handleMapConfirm` sets `locationSource: 'map'` with `label: null`. `handleCreate` guards on `pendingLocation && locationSource`, sets `active: true` explicitly, and on failure shows _"Failed to create reminder..."_ without clearing state. Fresh state per open is ensured by `home.tsx` rendering as `{isModalVisible && <ReminderLocationModal key={String(isModalVisible)} visible={true} .../>}`.
+**Behavior:** `handleUseCurrentLocation` catches `LocationPermissionDeniedError` (checked via `instanceof` and fallback `err.name` check) to show the permission-denied inline message. `handleMapConfirm` sets `locationSource: 'map'` with `label: null`. `handleCreate` guards on `pendingLocation && locationSource`, sets `active: true` explicitly, and on failure passes actionable `createReminder` messages through verbatim (prefix `Cannot create reminder:`) while keeping the generic _"Failed to create reminder..."_ for unknown errors — without clearing state or closing the modal. Fresh state per open is ensured by `home.tsx` rendering as `{isModalVisible && <ReminderLocationModal key={String(isModalVisible)} visible={true} .../>}`.
 
 ### `components/MapPicker.tsx`
 
@@ -179,7 +179,7 @@ type MapPickerProps = {
 ### `app/(tabs)/home.tsx` Wiring
 
 - `reminder` state + `isDescriptionValid(reminder)` drives `isValid`.
-- `handleChangeText` updates `reminder`; `handleButton` opens the modal only when `isValid`.
+- `handleChangeText` updates `reminder`; `handleButton` opens the modal only when `isValid` **and** the store's public `isLoggedIn` is true (signed-out users never reach the location popup; the modal additionally renders only when signed in). `userId` comes from the public `user.userId` accessor — never the private `_session` field — and since sign-in/sign-up/Auth populate the session with the Appwrite account id (`userDoc.accountid`), the hint matches the session `createReminder` derives ownership from.
 - Mic button: `TouchableOpacity` with `disabled={true}`, `accessibilityLabel="Microphone, unavailable"`, `accessibilityState={{ disabled: true }}`, `opacity-50` — visible but inert.
 - Modal wiring as described above. No direct Appwrite calls from the screen; all creation goes through `ReminderLocationModal` → `createReminder`.
 
@@ -247,7 +247,7 @@ npm test        # jest --ci (preset jest-expo, setup jest.setup.js)
 
 | Suite | What it covers |
 |-------|----------------|
-| `lib/__tests__/createReminder.test.ts` | Success path (correct `databaseId`/`collectionId`/`ID.unique()` and allowlisted payload, three per-document permissions, `locationLabel` inclusion/omission, `active` default/override), validation rejections before any SDK call (empty/whitespace description, >500 chars, out-of-range lat/lng, empty `userId`, invalid `locationSource`, >255 label), SDK error propagation. Mocks `react-native-appwrite` via `__database`/`Permission`/`Role`/`ID` test doubles. |
+| `lib/__tests__/createReminder.test.ts` | Success path (correct `databaseId`/`collectionId`/`ID.unique()` and allowlisted payload, three per-document permissions, `locationLabel` inclusion/omission, `active` default/override), session-derived ownership (empty/omitted caller `userId` falls back to `account.get()` id; mismatched caller id and missing session throw clear errors without touching `createDocument`), validation rejections before any SDK call (empty/whitespace description, >500 chars, out-of-range lat/lng, invalid `locationSource`, >255 label), SDK error propagation. Mocks `react-native-appwrite` via `__database`/`__account`/`Permission`/`Role`/`ID` test doubles. |
 | `lib/__tests__/locationService.reminder.test.ts` | `LocationPermissionDeniedError` / `LocationUnavailableError` are `Error` subclasses; `getCurrentLocationWithLabel` happy path (foreground grant → `getCurrentPositionAsync` with `Accuracy.Balanced` → `reverseGeocodeAsync` → `"Street, City"` label), permission-denied throw without calling position/geocode, `label: null` on empty geocode array, `label: null` on `reverseGeocodeAsync` throw, `LocationUnavailableError` thrown (with friendly message) when `getCurrentPositionAsync` rejects with `E_LOCATION_UNAVAILABLE` or any other error. Mocks `expo-location`. |
 | `utils/__tests__/validateReminder.test.ts` | `isDescriptionValid` (normal, empty, whitespace-only, exactly 500, 501, trim-before-measure) and `isLocationValid` (boundary pairs, out-of-range lat/lng, non-finite, non-number). |
 

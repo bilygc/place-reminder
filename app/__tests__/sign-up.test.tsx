@@ -217,7 +217,8 @@ describe('app/(auth)/sign-up', () => {
     it('calls createUser, logs the user into MobX, and navigates to /home', async () => {
       const user = new User();
       createUser.mockResolvedValue({
-        $id: 'user-1',
+        $id: 'doc-1',
+        accountid: 'acct-1',
         avatar: 'https://avatar',
       });
       const r = render(user);
@@ -237,7 +238,8 @@ describe('app/(auth)/sign-up', () => {
         'alice'
       );
       expect(user.isLoggedIn).toBe(true);
-      expect(user.userId).toBe('user-1');
+      // Session identity is the ACCOUNT id, not the user-document $id.
+      expect(user.userId).toBe('acct-1');
       expect(user.email).toBe('alice@example.com');
       expect(user.userName).toBe('alice');
       expect(router.replace).toHaveBeenCalledWith('/home');
@@ -245,8 +247,7 @@ describe('app/(auth)/sign-up', () => {
   });
 
   describe('error path', () => {
-    it('logs to console.error and does not navigate when createUser rejects', async () => {
-      createUser.mockRejectedValue(new Error('Network failure'));
+    it('logs to console.error and does not navigate when createUser rejects', async () => {      createUser.mockRejectedValue(new Error('Network failure'));
       const r = render();
       fill(r, 'Username', 'alice');
       fill(r, 'Email', 'alice@example.com');
@@ -263,6 +264,34 @@ describe('app/(auth)/sign-up', () => {
       await flush();
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Network failure');
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it('logs to console.error and does not navigate when the user document is missing its account id', async () => {
+      createUser.mockResolvedValue({
+        $id: 'doc-1',
+        avatar: 'https://avatar',
+      });
+      const user = new User();
+      const r = render(user);
+      fill(r, 'Username', 'alice');
+      fill(r, 'Email', 'alice@example.com');
+      fill(r, 'Password', 'Abcdef12');
+      fill(r, 'Confirm password', 'Abcdef12');
+
+      await act(async () => {
+        try {
+          await findButton(r).props.onPress();
+        } catch {
+          /* submit re-throws — expected */
+        }
+      });
+      await flush();
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/account id/i)
+      );
+      expect(user.isLoggedIn).toBe(false);
       expect(router.replace).not.toHaveBeenCalled();
     });
   });

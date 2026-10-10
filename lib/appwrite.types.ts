@@ -8,7 +8,11 @@ export type CreateReminderInput = {
   longitude: number; // -180..180
   locationSource: LocationSource;
   locationLabel?: string; // reverse-geocoded label, ≤255 chars
-  userId: string; // owner (Appwrite account $id)
+  // Optional cross-check only: the document owner and its per-document
+  // permissions are ALWAYS derived from the active session (account.get()).
+  // When present and non-empty, userId must match the session id or
+  // createReminder throws; empty/omitted means "use the session id".
+  userId?: string;
   active?: boolean; // defaults to true
 };
 

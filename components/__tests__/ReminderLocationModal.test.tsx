@@ -1,4 +1,5 @@
 import React from 'react';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import ReminderLocationModal from '../ReminderLocationModal';
 import MapPicker from '../MapPicker';
@@ -120,5 +121,105 @@ describe('ReminderLocationModal map initial region', () => {
       latitudeDelta: 0.0922,
       longitudeDelta: 0.0421,
     });
+  });
+});
+
+describe('ReminderLocationModal createReminder error passthrough', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createReminder } = require('@/lib/appwrite');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getCurrentLocationWithLabel } = require('@/lib/locationService');
+
+  const SESSION_EXPIRED =
+    'Cannot create reminder: no active session. Please sign in and try again.';
+
+  function renderModalForCreate(callbacks?: {
+    onClose?: jest.Mock;
+    onCreated?: jest.Mock;
+  }) {
+    const onClose = callbacks?.onClose ?? jest.fn();
+    const onCreated = callbacks?.onCreated ?? jest.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        <ReminderLocationModal
+          visible
+          description="Buy milk"
+          userId="acct-1"
+          onClose={onClose}
+          onCreated={onCreated}
+        />
+      );
+    });
+    return { renderer, onClose, onCreated };
+  }
+
+  async function chooseCurrentLocation(
+    renderer: TestRenderer.ReactTestRenderer
+  ) {
+    getCurrentLocationWithLabel.mockResolvedValue({
+      latitude: 10,
+      longitude: 20,
+      label: 'Home',
+    });
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Use current location' })
+        .props.handlePress();
+    });
+  }
+
+  async function pressAddReminder(renderer: TestRenderer.ReactTestRenderer) {
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+  }
+
+  function visibleTexts(renderer: TestRenderer.ReactTestRenderer): string[] {
+    return renderer.root.findAllByType(Text).map((t) => {
+      const children = t.props.children;
+      return Array.isArray(children)
+        ? children.map(String).join('')
+        : String(children ?? '');
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    LocationService.getState.mockReturnValue({ location: null });
+    LocationService.onLocationUpdate.mockReturnValue(jest.fn());
+  });
+
+  it('shows the actionable session-expired message and keeps the modal open', async () => {
+    createReminder.mockRejectedValue(new Error(SESSION_EXPIRED));
+    const { renderer, onCreated, onClose } = renderModalForCreate();
+
+    await chooseCurrentLocation(renderer);
+    await pressAddReminder(renderer);
+
+    expect(createReminder).toHaveBeenCalled();
+    // The friendly createReminder message passes through verbatim.
+    expect(visibleTexts(renderer)).toContain(SESSION_EXPIRED);
+    // Retry state is preserved: nothing closed, nothing "created".
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(
+      renderer.root.findByProps({ title: 'Add reminder' })
+    ).toBeTruthy();
+  });
+
+  it('keeps the generic message for unknown (non-actionable) errors', async () => {
+    createReminder.mockRejectedValue(new Error('boom'));
+    const { renderer, onCreated } = renderModalForCreate();
+
+    await chooseCurrentLocation(renderer);
+    await pressAddReminder(renderer);
+
+    expect(visibleTexts(renderer)).toContain(
+      'Failed to create reminder. Please try again.'
+    );
+    expect(onCreated).not.toHaveBeenCalled();
   });
 });

@@ -19,7 +19,8 @@ jest.mock('react-native-reanimated');
 jest.mock('@/lib/appwrite', () => ({
   signIn: jest.fn(),
   getCurrentUser: jest.fn().mockResolvedValue({
-    $id: 'user-1',
+    $id: 'doc-1',
+    accountid: 'acct-1',
     email: 'user@example.com',
     avatar: 'https://avatar',
   }),
@@ -194,6 +195,54 @@ describe('app/(auth)/sign-in', () => {
     expect(signIn).toHaveBeenCalledWith('user@example.com', 'secret123');
     expect(getCurrentUser).toHaveBeenCalled();
     expect(router.replace).toHaveBeenCalledWith('/home');
+  });
+
+  it('stores the ACCOUNT id (not the user-document id) in the MobX store on success', async () => {
+    const user = new User();
+    const r = render(user);
+    act(() => {
+      findField(r, 'Email').props.handleChangeText('user@example.com');
+    });
+    act(() => {
+      findField(r, 'Password').props.handleChangeText('secret123');
+    });
+
+    await act(async () => {
+      findButton(r, 'Log In').props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Mocked profile is $id 'doc-1' / accountid 'acct-1': the store must hold
+    // the account id, otherwise createReminder's cross-check would throw.
+    expect(user.isLoggedIn).toBe(true);
+    expect(user.userId).toBe('acct-1');
+  });
+
+  it('alerts when the user profile is missing its account id', async () => {
+    getCurrentUser.mockResolvedValueOnce({
+      $id: 'doc-1',
+      email: 'user@example.com',
+      avatar: 'https://avatar',
+    });
+    const r = render();
+    act(() => {
+      findField(r, 'Email').props.handleChangeText('user@example.com');
+    });
+    act(() => {
+      findField(r, 'Password').props.handleChangeText('secret123');
+    });
+
+    await act(async () => {
+      findButton(r, 'Log In').props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(alertMock).toHaveBeenCalledWith(
+      expect.stringMatching(/account id/i)
+    );
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('alerts and does not call signIn when the email is empty', async () => {

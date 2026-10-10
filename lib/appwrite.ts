@@ -147,9 +147,13 @@ export const createReminder: CreateReminderFunction = async (input) => {
     );
   }
 
-  if (!input.userId || input.userId.trim() === '') {
-    throw new Error('Invalid reminder: userId is required');
-  }
+  // NOTE: input.userId is intentionally NOT validated as required here. The
+  // document owner is derived server-truthfully from the active session below;
+  // a caller-supplied userId is only an optional cross-check (mismatch throws).
+  // Trusting caller input for permissions caused the runtime rejection
+  // "Permissions must be one of: (any, users, user:<accountId>, ...)" when the
+  // caller passed a user-collection document id (or '') instead of the
+  // Appwrite account $id.
 
   const validSources: LocationSource[] = ['current', 'map'];
   if (!validSources.includes(input.locationSource)) {
@@ -170,6 +174,33 @@ export const createReminder: CreateReminderFunction = async (input) => {
   }
 
   try {
+    // Derive the owner from the active session — never from caller input.
+    // account.get() returns the Appwrite account (Models.User with $id), which
+    // is the only id the server accepts in Role.user(...) permissions.
+    let ownerId: string;
+    try {
+      const sessionUser = await account.get();
+      ownerId = sessionUser?.$id ?? '';
+    } catch {
+      throw new Error(
+        'Cannot create reminder: no active session. Please sign in and try again.'
+      );
+    }
+    if (!ownerId || ownerId.trim() === '') {
+      throw new Error(
+        'Cannot create reminder: no active session. Please sign in and try again.'
+      );
+    }
+
+    // Optional cross-check: a non-empty caller-supplied userId must match the
+    // session id, otherwise the caller is confused about who is signed in.
+    const callerId = input.userId?.trim() ?? '';
+    if (callerId !== '' && callerId !== ownerId) {
+      throw new Error(
+        'Cannot create reminder: caller userId does not match the signed-in user.'
+      );
+    }
+
     const data: {
       userId: string;
       description: string;
@@ -179,7 +210,7 @@ export const createReminder: CreateReminderFunction = async (input) => {
       active: boolean;
       locationLabel?: string;
     } = {
-      userId: input.userId,
+      userId: ownerId,
       description: input.description.trim(),
       latitude: input.latitude,
       longitude: input.longitude,
@@ -197,9 +228,9 @@ export const createReminder: CreateReminderFunction = async (input) => {
       ID.unique(),
       data,
       [
-        Permission.read(Role.user(input.userId)),
-        Permission.update(Role.user(input.userId)),
-        Permission.delete(Role.user(input.userId)),
+        Permission.read(Role.user(ownerId)),
+        Permission.update(Role.user(ownerId)),
+        Permission.delete(Role.user(ownerId)),
       ]
     )) as unknown as Reminder;
 

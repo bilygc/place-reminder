@@ -15,6 +15,7 @@ import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import { useAppwrite } from '@/hooks/useAppwrite';
 import { getCurrentUser, signIn } from '@/lib/appwrite';
+import { resolveSessionAccountId } from '@/lib/sessionIdentity';
 import { validateEmail } from '@/utils/validateEmail';
 import ensureError from '@/utils/ensureError';
 import { GreenLoading } from '@/components/Loading/Loading';
@@ -52,9 +53,13 @@ const SignIn = observer(() => {
         throw new Error('Unable to load user profile after sign in');
       }
 
+      // Session identity is the Appwrite ACCOUNT id (userDoc.accountid), not
+      // the user-document $id — createReminder derives ownership from
+      // account.get() and rejects a mismatched caller id. A missing accountid
+      // throws here and surfaces via the alert below, never silently.
       user.login({
         session: {
-          $id: userDoc.$id,
+          $id: resolveSessionAccountId(userDoc),
           isLoggedIn: true,
         },
         email: userDoc.email,

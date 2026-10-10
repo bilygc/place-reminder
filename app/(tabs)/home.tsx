@@ -21,8 +21,13 @@ const Home = () => {
   const [reminder, setReminder] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const user = useContext(UserContext);
-  // User keeps _session private; this is the established access pattern in the app.
-  const userId = (user as unknown as { _session?: { $id: string } } | null)?._session?.$id ?? '';
+  // Use the store's public typed accessors. Never reach into the private
+  // `_session` field (or the raw Appwrite account object, which has no
+  // `_session` at all) — that produced '' or a wrong id and Appwrite rejected
+  // the resulting Role.user(...) permissions. createReminder() owns the final
+  // owner derivation from the active session; userId here is a cross-check hint.
+  const userId = user.userId;
+  const isSignedIn = user.isLoggedIn;
   const isValid = isDescriptionValid(reminder);
   // const {
   //   addLocationReminder,
@@ -63,7 +68,10 @@ const Home = () => {
   };
 
   const handleButton = () => {
-    if (isValid) {
+    // Gate modal entry on a signed-in state rather than an empty-string
+    // userId fallback: with no session, createReminder would fail on
+    // permissions anyway, so don't open the location popup at all.
+    if (isValid && isSignedIn) {
       setIsModalVisible(true);
     }
   };
@@ -177,7 +185,7 @@ const Home = () => {
           </View>
         )}
       />
-      {isModalVisible && (
+      {isModalVisible && isSignedIn && (
         <ReminderLocationModal
           key={String(isModalVisible)}
           visible={true}

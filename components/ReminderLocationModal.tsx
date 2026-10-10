@@ -122,7 +122,17 @@ const ReminderLocationModal = ({
       });
       onCreated();
     } catch (err) {
-      setError('Failed to create reminder. Please try again.');
+      // Pass through actionable createReminder messages verbatim (they start
+      // with "Cannot create reminder:", e.g. session expired while the modal
+      // was open) so the user knows what to do. Only unknown errors fall back
+      // to the generic string. State is preserved for retry; the modal stays
+      // open either way (onCreated/onClose are not called here).
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        message.startsWith('Cannot create reminder:')
+          ? message
+          : 'Failed to create reminder. Please try again.'
+      );
     } finally {
       setCreating(false);
     }
