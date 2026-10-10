@@ -47,15 +47,6 @@ All access to the `reminders` collection must go through `lib/reminders.ts`
 `lib/appwrite.types.ts` (`VideoPost`, `GetAllPostsFunction`, etc.) once no
 callers remain. Tracked as follow-up to ATO-11.
 
-## expo-doctor failures are pre-existing and unrelated to ATO-11
+## expo-doctor (resolved)
 
-`npx expo-doctor` currently fails on environment issues unrelated to the
-reminders change set:
-
-- Missing native binary for `lightningcss` (e.g. `lightningcss.linux-x64-gnu`).
-- 9 Expo packages behind expected versions for SDK 57 (run `npx expo install --check` to list).
-
-These existed before ATO-11 and do not affect the reminders DAL or its tests
-(`npm test` / `jest --ci` is the relevant gate; baseline is `408` tests in
-`scripts/test-count-baseline.txt`). Fix by reinstalling deps / running
-`npx expo install --check` and `npx expo install --fix` separately from this ticket.
+`npx expo-doctor` now passes **21/21** after SDK alignment. Previously failed due to missing `lightningcss` native binary and 9 Expo packages behind expected SDK 57 versions; both resolved by the package updates on this branch. The test-count baseline is **389** (`scripts/test-count-baseline.txt`).

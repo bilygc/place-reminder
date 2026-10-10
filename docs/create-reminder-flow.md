@@ -233,7 +233,7 @@ Collection: `reminders` (`config.reminderCollectionId`, env `EXPO_PUBLIC_REMINDE
 
 ### Expo SDK Alignment
 
-- Expo SDK 57. Nine SDK packages were aligned to `~57.0.15` patch levels in this ticket (e.g. `expo ~57.0.15`, `expo-router ~57.0.15`, `expo-location ~57.0.12`, `expo-task-manager ~57.0.12`). `expo-doctor` passes 21/21. See `package.json` for the full list.
+- Expo SDK 57. 17 packages were aligned to SDK-expected versions in this ticket (e.g. `expo ~57.0.27`, `expo-location ~57.0.20`, `expo-router ~57.0.25`, `react-native 0.86.3`). `expo-doctor` passes 21/21. See `package.json` for the full list.
 
 ## Testing
 
@@ -255,7 +255,7 @@ npm test        # jest --ci (preset jest-expo, setup jest.setup.js)
 
 - `__mocks__/react-native-maps.js` — manual Jest mock providing `MapView`, `Marker`, `Callout`, `Polyline`, `Circle`, `PROVIDER_GOOGLE/DEFAULT` as lightweight host elements. Opt in with `jest.mock('react-native-maps')` (no factory) in any suite that renders `MapPicker` / `ReminderLocationModal`.
 
-**Baseline:** **366 tests / 33 suites green** after ATO-12.
+**Baseline:** **389 tests** (`scripts/test-count-baseline.txt`) after ATO-12 (408 − 71 removed duplicate-module tests + 52 new tests on this branch).
 
 **Env for tests:** `lib/__tests__/createReminder.test.ts` sets dummy `EXPO_PUBLIC_*` vars and expects `requireEnv` in `lib/appwrite.ts` to pass. For local runs, copy `.env.example` to `.env` and fill `EXPO_PUBLIC_REMINDER_COLLECTION_ID` etc.
 
