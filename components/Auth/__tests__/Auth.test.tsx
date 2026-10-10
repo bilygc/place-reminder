@@ -4,7 +4,7 @@
  *
  * Covers:
  *  - user present -> user.login called with the mapped fields
- *    (session.$id = userData.$id, userName = userData.email, avatar, email).
+ *    (session.$id = userData.accountid, userName = userData.email, avatar, email).
  *  - no user (getCurrentUser resolves undefined) -> no login, children render.
  *  - getCurrentUser rejects -> console.error, no login, children render.
  *  - UserContext provides a User instance to children (before and after login).
@@ -99,7 +99,12 @@ describe('Auth', () => {
   });
 
   it('logs the user in with mapped fields when a user document is returned', async () => {
-    const userData = { $id: 'user-1', email: 'a@b.com', avatar: 'https://avatar' };
+    const userData = {
+      $id: 'doc-1',
+      accountid: 'acc-1',
+      email: 'a@b.com',
+      avatar: 'https://avatar',
+    };
     accountInstance.get.mockResolvedValue({ $id: 'acc-1' });
     databaseInstance.listDocuments.mockResolvedValue({ documents: [userData] });
 
@@ -109,7 +114,9 @@ describe('Auth', () => {
 
     expect(loginSpy).toHaveBeenCalledTimes(1);
     expect(loginSpy).toHaveBeenCalledWith({
-      session: { $id: 'user-1', isLoggedIn: true },
+      // Session identity is the ACCOUNT id (userData.accountid), not the
+      // user-document $id — the two live in different id spaces.
+      session: { $id: 'acc-1', isLoggedIn: true },
       email: 'a@b.com',
       // userName is mapped from userData.email (not a username field).
       userName: 'a@b.com',
@@ -118,7 +125,12 @@ describe('Auth', () => {
   });
 
   it('reflects the logged-in state on the UserContext instance', async () => {
-    const userData = { $id: 'user-1', email: 'a@b.com', avatar: 'https://avatar' };
+    const userData = {
+      $id: 'doc-1',
+      accountid: 'acc-1',
+      email: 'a@b.com',
+      avatar: 'https://avatar',
+    };
     accountInstance.get.mockResolvedValue({ $id: 'acc-1' });
     databaseInstance.listDocuments.mockResolvedValue({ documents: [userData] });
 
@@ -128,7 +140,7 @@ describe('Auth', () => {
 
     expect(captured.current).toBeInstanceOf(User);
     expect(captured.current?.isLoggedIn).toBe(true);
-    expect(captured.current?.userId).toBe('user-1');
+    expect(captured.current?.userId).toBe('acc-1');
     expect(captured.current?.email).toBe('a@b.com');
     expect(captured.current?.avatar).toBe('https://avatar');
   });
@@ -161,6 +173,23 @@ describe('Auth', () => {
     expect(loginSpy).not.toHaveBeenCalled();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
     // Children still render in the logged-out state.
+    expect(renderer.root.findByType(Text).props.children).toBe('child-marker');
+    expect(captured.current).toBeInstanceOf(User);
+    expect(captured.current?.isLoggedIn).toBe(false);
+  });
+
+  it('does not log in when the user document is missing its account id', async () => {
+    accountInstance.get.mockResolvedValue({ $id: 'acc-1' });
+    databaseInstance.listDocuments.mockResolvedValue({
+      documents: [{ $id: 'doc-1', email: 'a@b.com', avatar: 'https://avatar' }],
+    });
+
+    const captured: Captured = { current: null };
+    const renderer = renderAuth(captured);
+    await flush();
+
+    expect(loginSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalled();
     expect(renderer.root.findByType(Text).props.children).toBe('child-marker');
     expect(captured.current).toBeInstanceOf(User);
     expect(captured.current?.isLoggedIn).toBe(false);

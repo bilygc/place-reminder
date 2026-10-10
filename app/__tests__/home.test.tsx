@@ -26,6 +26,8 @@ import Home from '../(tabs)/home';
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import CardReminder from '@/components/CardReminder/CardReminder';
+import ReminderLocationModal from '@/components/ReminderLocationModal';
+import { User, UserContext } from '@/store/user';
 import icons from '@/constants/icons';
 
 function render() {
@@ -34,6 +36,46 @@ function render() {
     renderer = TestRenderer.create(<Home />);
   });
   return renderer;
+}
+
+function renderAs(user: User) {
+  let renderer!: TestRendererNS.ReactTestRenderer;
+  act(() => {
+    renderer = TestRenderer.create(
+      <UserContext.Provider value={user}>
+        <Home />
+      </UserContext.Provider>
+    );
+  });
+  return renderer;
+}
+
+function signedInUser(): User {
+  const user = new User();
+  user.login({
+    session: { $id: 'user-1', isLoggedIn: true },
+    email: 'user@example.com',
+    userName: 'user',
+    avatar: '',
+  });
+  return user;
+}
+
+function typeValidReminder(renderer: TestRendererNS.ReactTestRenderer) {
+  act(() => {
+    renderer.root
+      .findByType(FormField)
+      .props.handleChangeText('Buy milk');
+  });
+}
+
+function pressAddReminder(renderer: TestRendererNS.ReactTestRenderer) {
+  const btn = renderer.root
+    .findAllByType(CustomButton)
+    .find((b) => b.props.title === 'Add reminder');
+  act(() => {
+    btn?.props.handlePress();
+  });
 }
 
 describe('app/(tabs)/home', () => {
@@ -92,5 +134,32 @@ describe('app/(tabs)/home', () => {
       return imgs.some((img) => img.props.source === icons.mic);
     });
     expect(micBtn).toBeTruthy();
+  });
+
+  it('does not open the location modal when signed out, even with a valid description', () => {
+    // Default UserContext value is logged out (userId '', isLoggedIn false).
+    const r = render();
+    typeValidReminder(r);
+    pressAddReminder(r);
+
+    expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
+  });
+
+  it('opens the location modal with the typed session userId when signed in', () => {
+    const r = renderAs(signedInUser());
+    typeValidReminder(r);
+    pressAddReminder(r);
+
+    const modals = r.root.findAllByType(ReminderLocationModal);
+    expect(modals).toHaveLength(1);
+    expect(modals[0].props.userId).toBe('user-1');
+    expect(modals[0].props.description).toBe('Buy milk');
+  });
+
+  it('does not open the location modal when signed in but the description is invalid', () => {
+    const r = renderAs(signedInUser());
+    pressAddReminder(r);
+
+    expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
   });
 });

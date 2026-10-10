@@ -14,10 +14,9 @@
  * 'granted'). The async stubs default to "granted" / resolved-undefined so
  * individual tests override only the values they care about.
  *
- * `hasServicesEnabledAsync` is stubbed too even though locationService.ts
- * doesn't currently call it — it's part of the public surface other callers
- * may reach for, and keeping it avoids surprises if a future test imports a
- * module that uses it.
+ * `hasServicesEnabledAsync` (defaults true) and `getLastKnownPositionAsync`
+ * (defaults null = no cached fix) back the service-check → fetch → retry →
+ * fallback flow in lib/locationService.ts; tests override them per case.
  */
 const PermissionStatus = {
   GRANTED: 'granted',
@@ -63,7 +62,9 @@ module.exports = {
   stopLocationUpdatesAsync: jest.fn(async () => undefined),
   startGeofencingAsync: jest.fn(async () => undefined),
   stopGeofencingAsync: jest.fn(async () => undefined),
+  reverseGeocodeAsync: jest.fn(async () => []),
   hasServicesEnabledAsync: jest.fn(async () => true),
+  getLastKnownPositionAsync: jest.fn(async () => null),
 
   Accuracy,
   ActivityType,

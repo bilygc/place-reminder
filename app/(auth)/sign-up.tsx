@@ -15,6 +15,7 @@ import Animated, {
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import { createUser } from '@/lib/appwrite';
+import { resolveSessionAccountId } from '@/lib/sessionIdentity';
 import { UserContext } from '@/store/user';
 
 interface FormProps {
@@ -68,9 +69,12 @@ const SignUp = observer(() => {
         form.username
       );
       console.log({ userDocument });
+      // Session identity is the Appwrite ACCOUNT id (userDocument.accountid),
+      // not the user-document $id — see sign-in.tsx for why. A missing
+      // accountid throws and surfaces via the catch below, never silently.
       user.login({
         session: {
-          $id: userDocument.$id,
+          $id: resolveSessionAccountId(userDocument),
           isLoggedIn: true,
         },
         email: form.email,

@@ -8,6 +8,7 @@
     "scheme": "place-reminder",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.myatomikappz.placereminder",
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
@@ -61,6 +62,10 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
+      ],
+      [
+        "react-native-maps",
+        {}
       ]
     ],
     "experiments": {

@@ -2,6 +2,8 @@
 
 This guide explains how to implement location tracking and geofencing functionality in your Place Reminder app.
 
+> **Related:** the home-screen create flow (description input + location popup → `createReminder`) is documented separately in [docs/create-reminder-flow.md](create-reminder-flow.md). That flow is foreground-only (no background permission) and writes owner-scoped `reminders` documents.
+
 ## Overview
 
 The implementation consists of several components:
@@ -224,5 +226,6 @@ In both cases, the `onPermissionDenied` callback is called with the permission t
 
 ## Additional Resources
 
+- [Create Reminder Flow (ATO-12)](create-reminder-flow.md) — foreground-only `getCurrentLocationWithLabel`, `ReminderLocationModal` / `MapPicker`, and the `createReminder` owner-scoped write.
 - [Expo Location Documentation](https://docs.expo.dev/versions/latest/sdk/location/)
 - [Expo TaskManager Documentation](https://docs.expo.dev/versions/latest/sdk/task-manager/)
