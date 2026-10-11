@@ -26,6 +26,7 @@ jest.mock('@/lib/reminders', () => ({
   listReminders: jest.fn(),
   updateReminder: jest.fn(),
   toggleReminderActive: jest.fn(),
+  deleteReminder: jest.fn(),
 }));
 
 import React from 'react';
@@ -43,10 +44,11 @@ import icons from '@/constants/icons';
 import type { Reminder } from '@/lib/appwrite.types';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { listReminders, toggleReminderActive } = require('@/lib/reminders');
+const { listReminders, toggleReminderActive, deleteReminder } = require('@/lib/reminders');
 
 type ListRemindersMock = jest.Mock<Promise<Reminder[]>, []>;
 type ToggleActiveMock = jest.Mock<Promise<Reminder>, [string, boolean]>;
+type DeleteReminderMock = jest.Mock<Promise<unknown>, [string]>;
 
 function makeReminder(
   overrides: Partial<Reminder> & { $id: string }
@@ -158,6 +160,8 @@ describe('app/(tabs)/home', () => {
           $updatedAt: '2026-02-01T00:00:00.000Z',
         })
     );
+    (deleteReminder as DeleteReminderMock).mockReset();
+    (deleteReminder as DeleteReminderMock).mockResolvedValue(undefined);
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -498,18 +502,23 @@ describe('app/(tabs)/home', () => {
       }).not.toThrow();
     });
 
-    it('trash target is a harmless no-op (delete lands in a later story)', async () => {
+    it('trash opens the delete confirmation — never a one-tap delete or toggle write', async () => {
       (listReminders as ListRemindersMock).mockResolvedValue([
         makeReminder({ $id: 'r1' }),
       ]);
       const r = renderAs(signedInUser());
       await flush();
 
-      expect(() => {
+      act(() => {
         r.root.findByType(CardReminder).props.onPressTrash('r1');
-      }).not.toThrow();
-      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      });
+      // Confirmation popup opens; nothing is deleted or toggled yet.
+      expect(
+        r.root.findAllByProps({ testID: 'delete-confirm-modal' }).length
+      ).toBeGreaterThan(0);
+      expect(deleteReminder).not.toHaveBeenCalled();
       expect(toggleReminderActive).not.toHaveBeenCalled();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
     });
   });
 
@@ -1048,7 +1057,7 @@ describe('app/(tabs)/home', () => {
       expect(modals[0].props.reminder.locationLabel).toBe('Home');
     });
 
-    it('does NOT open the edit popup from the trash target', async () => {
+    it('does NOT open the edit popup from the trash target (it opens the delete confirmation instead)', async () => {
       (listReminders as ListRemindersMock).mockResolvedValue([
         makeReminder({ $id: 'r1' }),
       ]);
@@ -1059,6 +1068,9 @@ describe('app/(tabs)/home', () => {
         r.root.findByType(CardReminder).props.onPressTrash('r1');
       });
       expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+      expect(
+        r.root.findAllByProps({ testID: 'delete-confirm-modal' }).length
+      ).toBeGreaterThan(0);
     });
 
     it('closes the edit popup on cancel without mutating or refetching', async () => {
@@ -1226,6 +1238,301 @@ describe('app/(tabs)/home', () => {
 
       expect(listReminders).toHaveBeenCalledTimes(2);
       expect(r.root.findByType(CardReminder).props.card.do).toBe('Server newer');
+    });
+  });
+
+  describe('delete reminder flow (ATO-16)', () => {
+    function pressTrash(
+      renderer: TestRendererNS.ReactTestRenderer,
+      id = 'r1'
+    ) {
+      const card = renderer.root
+        .findAllByType(CardReminder)
+        .find((c) => c.props.card.$id === id);
+      act(() => {
+        card?.props.onPressTrash(id);
+      });
+    }
+
+    function pressPopupButton(
+      renderer: TestRendererNS.ReactTestRenderer,
+      title: string
+    ) {
+      const btn = renderer.root
+        .findAllByType(CustomButton)
+        .find((b) => b.props.title === title);
+      act(() => {
+        btn?.props.handlePress();
+      });
+    }
+
+    function popupButton(
+      renderer: TestRendererNS.ReactTestRenderer,
+      title: string
+    ) {
+      return renderer.root
+        .findAllByType(CustomButton)
+        .find((b) => b.props.title === title);
+    }
+
+    it('opens the confirmation popup on trash press with zero network calls', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+
+      expect(
+        r.root.findAllByProps({ testID: 'delete-confirm-modal' }).length
+      ).toBeGreaterThan(0);
+      expect(allText(r)).toContain('Delete this reminder?');
+      expect(popupButton(r, 'Confirm')).toBeTruthy();
+      expect(popupButton(r, 'Cancel')).toBeTruthy();
+      // No delete fired by opening the popup alone.
+      expect(deleteReminder).not.toHaveBeenCalled();
+    });
+
+    it('cancel closes the popup with zero network calls and leaves the list untouched', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(listReminders).toHaveBeenCalledTimes(1);
+
+      pressTrash(r, 'r1');
+      // NOTE: the RN Modal host duplicates its subtree in the test renderer,
+      // so presence is asserted as >0 (closed-state assertions stay exact 0).
+      expect(
+        r.root.findAllByProps({ testID: 'delete-confirm-modal' }).length
+      ).toBeGreaterThan(0);
+
+      pressPopupButton(r, 'Cancel');
+
+      expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
+      expect(deleteReminder).not.toHaveBeenCalled();
+      expect(listReminders).toHaveBeenCalledTimes(1);
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+    });
+
+    it('confirm deletes and removes only that card with no refetch and no duplicates', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', description: 'First' }),
+        makeReminder({ $id: 'r2', description: 'Second' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(2);
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      await flush();
+
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+      expect(deleteReminder).toHaveBeenLastCalledWith('r1');
+      // Pessimistic local removal: popup closed, one card left, no refetch.
+      expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
+      expect(listReminders).toHaveBeenCalledTimes(1);
+      const cards = r.root.findAllByType(CardReminder);
+      expect(cards).toHaveLength(1);
+      expect(cards[0].props.card.$id).toBe('r2');
+    });
+
+    it('keeps the card and shows the actionable error verbatim when delete fails', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      (deleteReminder as DeleteReminderMock).mockRejectedValueOnce(
+        new Error(
+          'Cannot delete reminder: session expired. Please sign in and try again.'
+        )
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      await flush();
+
+      // Card stays, popup stays open with the pass-through message inline.
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+      const errors = r.root.findAllByProps({ testID: 'delete-reminder-error' });
+      expect(errors.length).toBeGreaterThan(0);
+      expect(allText(r)).toContain(
+        'Cannot delete reminder: session expired. Please sign in and try again.'
+      );
+      expect(listReminders).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a generic inline error when delete fails with an unknown error', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      (deleteReminder as DeleteReminderMock).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      await flush();
+
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+      expect(
+        r.root.findAllByProps({ testID: 'delete-reminder-error' }).length
+      ).toBeGreaterThan(0);
+      expect(allText(r)).toContain('Failed to delete reminder. Please try again.');
+    });
+
+    it('renders the empty state after deleting the last reminder', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      await flush();
+
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+      expect(allText(r)).toContain('There\'s nothing to remind');
+    });
+
+    it('guards double-confirm: one network call, confirm disabled in flight', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      let resolveDelete!: (value: unknown) => void;
+      (deleteReminder as DeleteReminderMock).mockReturnValue(
+        new Promise<unknown>((resolve) => {
+          resolveDelete = resolve;
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+      // Two rapid confirms before the first resolves.
+      pressPopupButton(r, 'Confirm');
+      expect(popupButton(r, 'Confirm')?.props.isLoading).toBe(true);
+      pressPopupButton(r, 'Confirm');
+
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveDelete(undefined);
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+      expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
+    });
+
+    it('guards same-tick double-confirm: one network call when invoked twice without re-render', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      let resolveDelete!: (value: unknown) => void;
+      (deleteReminder as DeleteReminderMock).mockReturnValue(
+        new Promise<unknown>((resolve) => {
+          resolveDelete = resolve;
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+      // Two invocations from the SAME render closure in one tick: with a
+      // state-only guard both would read stale `null` and fire. The
+      // synchronous ref must block the second.
+      const confirm = popupButton(r, 'Confirm');
+      act(() => {
+        confirm?.props.handlePress();
+        confirm?.props.handlePress();
+      });
+
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveDelete(undefined);
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+      expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
+    });
+
+    it('ignores repeat trash presses for the id while its delete is in flight', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+        makeReminder({ $id: 'r2' }),
+      ]);
+      let resolveDelete!: (value: unknown) => void;
+      (deleteReminder as DeleteReminderMock).mockReturnValue(
+        new Promise<unknown>((resolve) => {
+          resolveDelete = resolve;
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+
+      // Repeat trash taps for the in-flight id fire nothing extra.
+      pressTrash(r, 'r1');
+      pressTrash(r, 'r1');
+      expect(deleteReminder).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveDelete(undefined);
+        await Promise.resolve();
+      });
+      await flush();
+
+      const cards = r.root.findAllByType(CardReminder);
+      expect(cards).toHaveLength(1);
+      expect(cards[0].props.card.$id).toBe('r2');
+    });
+
+    it('clears the delete popup and error on account switch', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', userId: 'user-1' }),
+      ]);
+      (deleteReminder as DeleteReminderMock).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+
+      pressTrash(r, 'r1');
+      pressPopupButton(r, 'Confirm');
+      await flush();
+      expect(
+        r.root.findAllByProps({ testID: 'delete-reminder-error' }).length
+      ).toBeGreaterThan(0);
+
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      act(() => {
+        r.update(
+          <UserContext.Provider value={signedInUser('user-2')}>
+            <Home />
+          </UserContext.Provider>
+        );
+      });
+      await flush();
+
+      expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
+      expect(r.root.findAllByProps({ testID: 'delete-reminder-error' })).toHaveLength(0);
     });
   });
 });

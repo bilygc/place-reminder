@@ -5,9 +5,10 @@ state (active → inactive, inactive → active) with no confirmation popup, the
 persists the change via `toggleReminderActive` in the DAL. Implements Linear
 ticket ATO-15.
 
-> **Out of scope:** the trash / delete target (stubbed until its own story;
-> delete will use a confirmation popup, deliberately different from toggle's
-> zero-confirmation design).
+> **Out of scope (pre-ATO-16):** the trash / delete target was stubbed
+> until its own story; delete uses a confirmation popup, deliberately different
+> from toggle's zero-confirmation design. Documented in
+> `docs/delete-reminder-flow.md`.
 
 ## User-Facing Flow
 
@@ -156,7 +157,7 @@ always equals the last tap.
 |--------|-----------|--------------|---------------------|
 | Body tap | `handlePressBody` → `EditReminderModal` | None (inline popup) | Bell only (`handlePressBell`) |
 | Bell tap | `handlePressBell` → optimistic flip + DAL | None | `handlePressBell` / `runToggleLoop` |
-| Trash tap | `handlePressTrash` (stub) | TBD in later story | — |
+| Trash tap | `handlePressTrash` → confirmation popup | **Yes** | — |
 
 The edit popup never sends `active` in its patch — `UpdateReminderPatch`
 excludes it, and the save path in `EditReminderModal` deliberately omits it.
