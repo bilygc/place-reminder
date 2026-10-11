@@ -28,7 +28,7 @@ jest.mock('@/lib/reminders', () => ({
 
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { TouchableOpacity, Image, Text } from 'react-native';
+import { FlatList, TouchableOpacity, Image, Text } from 'react-native';
 import type * as TestRendererNS from 'react-test-renderer';
 import Home from '../(tabs)/home';
 import { FormField } from '@/components/FormField';
@@ -169,6 +169,55 @@ describe('app/(tabs)/home', () => {
     });
 
     expect(r.root.findByType(FormField).props.value).toBe('Buy milk');
+  });
+
+  describe('input focus stability (header remount regression)', () => {
+    // Regression test: the reminder-name TextInput lives inside FlatList's
+    // header. If ListHeaderComponent is an inline arrow function, every
+    // keystroke (setReminder → re-render) gives FlatList a NEW component
+    // type, so React unmounts/remounts the whole header subtree and the
+    // TextInput loses focus after every character. The header must be a
+    // stable component type receiving fresh values via props instead.
+    const headerTypeOf = (header: unknown): unknown =>
+      header !== null &&
+      typeof header === 'object' &&
+      '$$typeof' in (header as Record<string, unknown>)
+        ? (header as { type: unknown }).type
+        : header;
+
+    it('does NOT remount the FormField when its value changes', () => {
+      const r = render();
+      const before = r.root.findByType(FormField);
+
+      act(() => {
+        before.props.handleChangeText('B');
+      });
+      act(() => {
+        r.root.findByType(FormField).props.handleChangeText('Bu');
+      });
+
+      const after = r.root.findByType(FormField);
+      expect(after.props.value).toBe('Bu');
+      // Compare by boolean (not toBe on instances) so a failure prints
+      // true/false instead of trying to serialize an unmounted node.
+      expect(after === (before as unknown)).toBe(true);
+    });
+
+    it('keeps a stable ListHeaderComponent/ListEmptyComponent type across renders', () => {
+      const r = render();
+      const flatList = () => r.root.findByType(FlatList);
+      const headerBefore = headerTypeOf(flatList().props.ListHeaderComponent);
+      const emptyBefore = headerTypeOf(flatList().props.ListEmptyComponent);
+
+      act(() => {
+        r.root.findByType(FormField).props.handleChangeText('Buy milk');
+      });
+
+      const headerAfter = headerTypeOf(flatList().props.ListHeaderComponent);
+      const emptyAfter = headerTypeOf(flatList().props.ListEmptyComponent);
+      expect(headerAfter).toBe(headerBefore);
+      expect(emptyAfter).toBe(emptyBefore);
+    });
   });
 
   it('renders an "Add reminder" CustomButton', () => {
