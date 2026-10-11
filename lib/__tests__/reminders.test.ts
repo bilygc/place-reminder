@@ -181,14 +181,37 @@ describe('reminders DAL (ATO-12 session-derived ownership)', () => {
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
 
-    it('maps a permission error to Failed to load reminder', async () => {
+    it('maps a foreign-document permission error to Reminder not found', async () => {
       databaseInstance.getDocument.mockRejectedValue(
-        new Error('User (role: guests) missing scope (account)')
+        new Error(
+          'User is not authorized to read document rem-1 (403 Forbidden)'
+        )
+      );
+
+      await expect(getReminder('rem-1')).rejects.toThrow('Reminder not found');
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('does NOT treat a transient error embedding digits (e.g. "4030ms") as permission-denied', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error('Request timed out after 4030ms')
       );
 
       await expect(getReminder('rem-1')).rejects.toThrow(
         'Failed to load reminder'
       );
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('maps a mid-read session expiry to the sign-in message, not Reminder not found', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error('User (role: guests) missing scope (documents)')
+      );
+
+      const error = await getReminder('rem-1').catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toMatch(/session expired.*sign in/i);
+      expect(error.message).not.toBe('Reminder not found');
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
 
@@ -325,6 +348,35 @@ describe('reminders DAL (ATO-12 session-derived ownership)', () => {
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
 
+    it('maps a foreign-document permission error on the read step to Reminder not found', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error(
+          'User is not authorized to read document rem-1 (403 Forbidden)'
+        )
+      );
+
+      await expect(
+        updateReminder('rem-1', { description: 'ok' })
+      ).rejects.toThrow('Reminder not found');
+      expect(databaseInstance.updateDocument).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('maps a mid-read session expiry to the sign-in message, not Reminder not found', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error('User (role: guests) missing scope (documents)')
+      );
+
+      const error = await updateReminder('rem-1', { description: 'ok' }).catch(
+        (e: Error) => e
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toMatch(/session expired.*sign in/i);
+      expect(error.message).not.toBe('Reminder not found');
+      expect(databaseInstance.updateDocument).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
     it('maps an updateDocument network error to Failed to update reminder', async () => {
       databaseInstance.getDocument.mockResolvedValue(makeDocument());
       databaseInstance.updateDocument.mockRejectedValue(
@@ -413,6 +465,33 @@ describe('reminders DAL (ATO-12 session-derived ownership)', () => {
       await expect(deleteReminder('rem-1')).rejects.toThrow(
         'Reminder not found'
       );
+      expect(databaseInstance.deleteDocument).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('maps a foreign-document permission error on the read step to Reminder not found', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error(
+          'User is not authorized to read document rem-1 (403 Forbidden)'
+        )
+      );
+
+      await expect(deleteReminder('rem-1')).rejects.toThrow(
+        'Reminder not found'
+      );
+      expect(databaseInstance.deleteDocument).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('maps a mid-read session expiry to the sign-in message, not Reminder not found', async () => {
+      databaseInstance.getDocument.mockRejectedValue(
+        new Error('User (role: guests) missing scope (documents)')
+      );
+
+      const error = await deleteReminder('rem-1').catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toMatch(/session expired.*sign in/i);
+      expect(error.message).not.toBe('Reminder not found');
       expect(databaseInstance.deleteDocument).not.toHaveBeenCalled();
       expect(consoleErrorSpy).toHaveBeenCalled();
     });

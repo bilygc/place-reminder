@@ -54,8 +54,6 @@ module.exports = {
   Query: {
     equal: jest.fn(),
     orderDesc: jest.fn(),
-    contains: jest.fn(),
-    search: jest.fn(),
   },
   ID: { unique: jest.fn() },
   Permission: {
@@ -66,29 +64,9 @@ module.exports = {
     delete: jest.fn((role) => `delete("${role}")`),
   },
   Role: {
-    any: jest.fn(() => 'any'),
-    user: jest.fn((id, status = '') =>
-      status === '' ? `user:${id}` : `user:${id}/${status}`
-    ),
-    users: jest.fn((status = '') =>
-      status === '' ? 'users' : `users/${status}`
-    ),
-    guests: jest.fn(() => 'guests'),
-    team: jest.fn((id, role = '') =>
-      role === '' ? `team:${id}` : `team:${id}/${role}`
-    ),
-    member: jest.fn((id) => `member:${id}`),
-    label: jest.fn((name) => `label:${name}`),
+    user: jest.fn((userId) => `user:${userId}`),
   },
   ImageGravity: { Top: 'top' },
-  Permission: {
-    read: jest.fn((role) => ({ operation: 'read', role })),
-    update: jest.fn((role) => ({ operation: 'update', role })),
-    delete: jest.fn((role) => ({ operation: 'delete', role })),
-  },
-  Role: {
-    user: jest.fn((userId) => `role:user:${userId}`),
-  },
   // Expose the singleton instances so tests can drive their methods.
   __account: accountInstance,
   __database: databaseInstance,

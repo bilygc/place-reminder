@@ -164,6 +164,83 @@ function isDocumentNotFoundError(error: Error): boolean {
 }
 
 /**
+ * True when the SDK rejected a call because the caller lacks permission
+ * (Appwrite 401/403, "missing scope"/"missing permissions"-style messages,
+ * unauthorized-type codes). After the collection ACL tightening (collection
+ * read/update/delete removed, per-document ACLs only), a single-document
+ * read of a foreign document throws this instead of a 404 — so read-step
+ * permission errors must map to the uniform `Reminder not found` error
+ * rather than leak existence via distinct messages.
+ */
+function isPermissionDeniedError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  // NOTE: no bare numeric '401'/'403' substring checks here — they
+  // misclassify transient errors embedding digit runs (e.g. a timeout
+  // "...after 4030ms") as permission-denied. Structured code/type checks
+  // below already cover real 401/403s.
+  if (
+    message.includes('missing scope') ||
+    message.includes('missing permission') ||
+    message.includes('permission denied') ||
+    message.includes('not authorized') ||
+    message.includes('unauthorized') ||
+    message.includes('forbidden')
+  ) {
+    return true;
+  }
+  const appwriteLike = error as Error & { code?: number; type?: string };
+  if (appwriteLike.code === 401 || appwriteLike.code === 403) {
+    return true;
+  }
+  const type = appwriteLike.type?.toLowerCase() ?? '';
+  if (
+    type.includes('unauthorized') ||
+    type.includes('forbidden') ||
+    type.includes('permission')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * True when a read-step failure looks like the session lapsed between
+ * `resolveOwnerId()` and the document read (guest-role / missing-scope /
+ * session-flavoured errors) rather than a foreign/missing document. These
+ * must surface as a sign-in message — normalizing them to
+ * `Reminder not found` would tell the user their own document is gone when
+ * they are simply signed out.
+ *
+ * Deliberately narrower than `isPermissionDeniedError`: a bare 401/403 code
+ * or a generic "not authorized"/"forbidden" signal stays on the
+ * `Reminder not found` path, so a valid session still cannot distinguish
+ * foreign from missing documents (no existence oracle).
+ */
+function isSessionExpiredError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  if (
+    message.includes('missing scope') ||
+    message.includes('role: guests') ||
+    message.includes('unauthenticated') ||
+    message.includes('session') ||
+    message.includes('please sign in') ||
+    message.includes('no active session')
+  ) {
+    return true;
+  }
+  const appwriteLike = error as Error & { code?: number; type?: string };
+  const type = appwriteLike.type?.toLowerCase() ?? '';
+  if (
+    type.includes('unauthenticated') ||
+    type.includes('session') ||
+    type.includes('missing_scope')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Resolve the document owner from the active session. `account.get()`
  * returns the Appwrite account, whose `$id` is the only id the server
  * accepts in per-document `Role.user(...)` ACLs. Throws a clear,
@@ -236,7 +313,12 @@ export const getReminder = async (id: string): Promise<Reminder> => {
   } catch (error: unknown) {
     const err = ensureError(error);
     console.error(err.message);
-    if (isDocumentNotFoundError(err)) {
+    if (isSessionExpiredError(err)) {
+      throw new Error(
+        'Cannot load reminder: session expired. Please sign in and try again.'
+      );
+    }
+    if (isDocumentNotFoundError(err) || isPermissionDeniedError(err)) {
       throw new Error('Reminder not found');
     }
     throw new Error('Failed to load reminder');
@@ -255,16 +337,36 @@ export const updateReminder = async (
   assertValidPatch(patch);
   const ownerId = await resolveOwnerId('update');
 
+  // Read step: a foreign document now surfaces a permission error (not a
+  // 404) after the ACL tightening, so permission errors here normalize to
+  // `Reminder not found` just like missing documents.
+  let existing;
   try {
-    const existing = await database.getDocument(
+    existing = await database.getDocument(
       config.databaseId,
       config.reminderCollectionId,
       docId
     );
-    if ((existing as unknown as Reminder).userId !== ownerId) {
+  } catch (error: unknown) {
+    const err = ensureError(error);
+    console.error(err.message);
+    if (isSessionExpiredError(err)) {
+      throw new Error(
+        'Cannot update reminder: session expired. Please sign in and try again.'
+      );
+    }
+    if (isDocumentNotFoundError(err) || isPermissionDeniedError(err)) {
       throw new Error('Reminder not found');
     }
+    throw new Error('Failed to update reminder');
+  }
+  if ((existing as unknown as Reminder).userId !== ownerId) {
+    throw new Error('Reminder not found');
+  }
 
+  // Mutate step: ownership is already verified, so any failure here is a
+  // genuine write failure, not an existence signal.
+  try {
     const document = await database.updateDocument(
       config.databaseId,
       config.reminderCollectionId,
@@ -289,16 +391,36 @@ export const deleteReminder = async (id: string): Promise<unknown> => {
   const docId = assertValidId(id, 'id');
   const ownerId = await resolveOwnerId('delete');
 
+  // Read step: see updateReminder — read-step permission errors normalize
+  // to `Reminder not found` so foreign and missing documents stay
+  // indistinguishable.
+  let existing;
   try {
-    const existing = await database.getDocument(
+    existing = await database.getDocument(
       config.databaseId,
       config.reminderCollectionId,
       docId
     );
-    if ((existing as unknown as Reminder).userId !== ownerId) {
+  } catch (error: unknown) {
+    const err = ensureError(error);
+    console.error(err.message);
+    if (isSessionExpiredError(err)) {
+      throw new Error(
+        'Cannot delete reminder: session expired. Please sign in and try again.'
+      );
+    }
+    if (isDocumentNotFoundError(err) || isPermissionDeniedError(err)) {
       throw new Error('Reminder not found');
     }
+    throw new Error('Failed to delete reminder');
+  }
+  if ((existing as unknown as Reminder).userId !== ownerId) {
+    throw new Error('Reminder not found');
+  }
 
+  // Mutate step: ownership is already verified, so any failure here is a
+  // genuine delete failure, not an existence signal.
+  try {
     const result = await database.deleteDocument(
       config.databaseId,
       config.reminderCollectionId,

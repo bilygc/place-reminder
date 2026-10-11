@@ -55,7 +55,7 @@ manually.
   `ownerId` is derived inside `createReminder` from the active session via
   `account.get()` (the Appwrite ACCOUNT $id, which is the only id the server
   accepts in `Role.user(...)`); it is never taken from caller input.
-- Ownership is enforced in the DAL as well (see below). A foreign or missing document surfaces the same `Reminder not found` error so existence is not leaked. **Follow-up (post-ACL-tightening):** with collection-level `read("users")` removed, a permission-denied read/update/delete on a foreign document may now surface the SDK's permission error instead of `Reminder not found`; the DAL's uniform not-found semantics for single-document reads still hold for missing documents, but the foreign-document path should be re-verified and normalized to `Reminder not found` if it drifts.
+- Ownership is enforced in the DAL as well (see below). A foreign or missing document surfaces the same `Reminder not found` error so existence is not leaked. **Post-ACL-tightening normalization (done):** with collection-level `read("users")` removed, a permission-denied read of a foreign document surfaces the SDK's permission error (403 / missing permissions) instead of a 404; the DAL normalizes read-step permission errors to `Reminder not found` via `isPermissionDeniedError` (alongside `isDocumentNotFoundError`), so the uniform not-found semantics hold for both missing and foreign documents.
 
 ### Environment
 
@@ -167,7 +167,7 @@ Thin wrapper over `updateReminder(id, { active })`.
 2. **Ownership is session-derived and mandatory.** Every read/update/delete/list resolves the owner from `account.get()` and verifies `document.userId === ownerId`; `listReminders` scopes via the `userId` equality filter (plus server-side per-document ACLs). `createReminder` derives `userId` from the session.
 3. **`patch` cannot carry `userId`.** The type `UpdateReminderPatch` is `Partial<Omit<CreateReminderInput, 'userId'>>`.
 4. **Client-side validation runs before any network call.** Validation failures throw synchronously (without calling the SDK and without `console.error`).
-5. **Error handling:** SDK failures are logged via `console.error(originalMessage)` and rethrown as generic messages (`Failed to create/load/update/delete/list reminder(s)`), except session failures which keep their actionable `Cannot ... no active session...` message. Not-found and not-owned are indistinguishable (`Reminder not found`). **Follow-up (post-ACL-tightening):** with collection-level `read`/`update`/`delete` removed, permission-denied on a foreign document may surface the SDK permission error instead of `Reminder not found` — re-verify and normalize this path if it drifts (see Security note above).
+5. **Error handling:** SDK failures are logged via `console.error(originalMessage)` and rethrown as generic messages (`Failed to create/load/update/delete/list reminder(s)`), except session failures which keep their actionable `Cannot ... no active session...` message. Not-found and not-owned are indistinguishable (`Reminder not found`); read-step permission errors on single-document reads normalize to `Reminder not found` as well (see Security note above), while mutate-step failures stay `Failed to ...`.
 
 ### Validation rules
 
@@ -184,7 +184,7 @@ Thin wrapper over `updateReminder(id, { active })`.
 ## Testing
 
 - **Suite:** `lib/__tests__/reminders.test.ts` — covers the five restored DAL functions (list/get/update/delete/toggle): session-derived ownership, newest-first ordering, exact SDK call args, client-side validation, and error propagation (network / permission / not-found / no-session paths). `createReminder` is covered separately by `lib/__tests__/createReminder.test.ts`.
-- **Baseline:** `scripts/test-count-baseline.txt` is `461` (was `408` before the restore; was `446` before the listReminders rework).
+- **Baseline:** `scripts/test-count-baseline.txt` is `445` (was `461` before the legacy-helper removal; was `408` before the restore; was `446` before the listReminders rework).
 - **Mock:** `__mocks__/react-native-appwrite.js` exposes stable singleton instances (`__database`, `__account`, etc.) and now includes `database.getDocument`, `database.deleteDocument`, `Permission`, and `Role`. Any test that needs the real SDK omits `jest.mock('react-native-appwrite')`.
 
 ```bash
@@ -193,4 +193,4 @@ npm test   # jest --ci
 
 ## Known drift
 
-Legacy video-post helpers in `lib/appwrite.ts` — `getAllPosts`, `getLatestPosts`, `getBookmarkedPosts`, `searchPosts`, `getUserPosts`, `bookmarkVideo` — still target `config.reminderCollectionId` but reference attributes (`title`, `creator`, `bookmarkedByUserId`, video/thumbnail fields) that **no longer exist** on the repurposed `reminders` collection. They are dead/broken and must not be used. See `docs/known-issues.md` for the tracking entry and cleanup follow-up.
+None currently. The legacy video-post helpers (`getAllPosts`, `getLatestPosts`, `getBookmarkedPosts`, `searchPosts`, `getUserPosts`, `bookmarkVideo`) were removed from `lib/appwrite.ts` along with their tests — they queried the `reminders` collection with no ownership filter against attributes that no longer exist. See `docs/known-issues.md` for the removal record.
