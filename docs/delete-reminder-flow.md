@@ -36,7 +36,7 @@ pessimistically removed from the local list. Implements Linear ticket ATO-16.
 | `deletedIds` | `Set<string>` — ids removed optimistically; cleared on session change |
 | `deletingIdRef` | `React.RefObject<string \| null>` — synchronous in-flight guard |
 | `sessionEpochRef` | `React.MutableRefObject<number>` — incremented on every `userId` change; stale delete results are discarded |
-| `handlePressTrash(id)` | Opens the confirmation popup; guards on `isSignedIn && !!userId`; per-id in-flight guard via `deletingId` / `deletingIdRef` |
+| `handlePressTrash(id)` | Opens the confirmation popup; guards on per-id in-flight state via `deletingIdRef` only (sign-in check is not performed here — the trash touch target is not gated on session; the session check lives in `deleteReminder` which throws `Cannot delete reminder: no active session...` from the DAL if called while signed out) |
 | `handleDeleteConfirm(id)` | Calls `deleteReminder(id)`; on success adds `id` to `deletedIds`; on failure sets inline error |
 | `handleDeleteCancel()` | Calls `onClose` only; no network activity |
 
@@ -75,11 +75,16 @@ useEffect(() => {
 `deletedIds` is cleared on session change so that a sign-in to a different
 account does not carry forward deletions from the previous session.
 
-### Empty list
+### Empty list (ATO-17)
 
 When the fetched `reminderList` (filtered to exclude `deletedIds`) is empty,
-the existing `HomeEmpty` component renders automatically. No special empty-state
-logic was needed for this ticket.
+the `HomeEmpty` component renders the placeholder _"No reminders yet — add
+one above"_ via `FlatList`'s `ListEmptyComponent`. It is gated to render only
+once the fetch has settled: `HomeEmpty` returns `null` while `isLoading` or
+when `error` is set, so the placeholder never flashes alongside the
+`GreenLoading` spinner or the retry error state rendered in `HomeHeader`.
+No special empty-state logic was needed for delete (ATO-16); the ATO-17 gate
+only suppresses the placeholder during loading/error.
 
 ### Relationship to Other Flows
 
@@ -119,7 +124,9 @@ npm test
 |-------|----------------|
 | `app/__tests__/home.test.tsx` (`delete reminder flow (ATO-16)`) | `handlePressTrash` opens popup, confirm calls `deleteReminder` with correct id, inline error on failure (actionable + generic messages), popup stays open on failure, card removed from list on success via `deletedIds`, cancel calls no network method, per-id in-flight guard prevents double delete, same-tick double-confirm regression test, session-epoch guard discards stale result after account switch, `deletedIds` cleared on session change, `HomeEmpty` renders when list is empty after delete, `handlePressTrash` no-op when not signed in |
 
-**Baseline movement:** 494 → **505** (11 new tests).
+| `app/__tests__/home.test.tsx` (`empty state (ATO-17)`) | `HomeEmpty` is null while loading, null on error, renders placeholder with testID `"reminders-empty"` only after successful fetch with zero results, Add reminder form stays visible alongside empty state (form never replaced by placeholder) — 5 tests |
+
+**Baseline movement:** 494 → **510** (27 new tests — 11 from ATO-16 + 5 from ATO-17 empty-state suite + 11 from ATO-17 other coverage).
 
 ## Related Docs
 

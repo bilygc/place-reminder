@@ -125,7 +125,7 @@ Lists reminders owned by the signed-in user, newest first. Ownership is
 session-derived — there is no `userId` parameter and none may be passed.
 
 - **Parameters:** none.
-- **Returns:** `Promise<Reminder[]>` — empty array when no matches.
+- **Returns:** `Promise<Reminder[]>` — empty array when no matches. (The UI representation of an empty result is `HomeEmpty` in `app/(tabs)/home.tsx` — see `docs/delete-reminder-flow.md` § Empty list (ATO-17).)
 - **Throws:** `Cannot list reminder: no active session. Please sign in and try again.` when signed out, or `Failed to list reminders` on failure.
 - **SDK call:** `database.listDocuments(..., [Query.equal('userId', ownerId), Query.orderDesc('$createdAt')])` where `ownerId` comes from `account.get()`.
 

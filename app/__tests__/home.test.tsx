@@ -1400,7 +1400,7 @@ describe('app/(tabs)/home', () => {
       await flush();
 
       expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
-      expect(allText(r)).toContain('There\'s nothing to remind');
+      expect(allText(r)).toContain('No reminders yet — add one above');
     });
 
     it('guards double-confirm: one network call, confirm disabled in flight', async () => {
@@ -1533,6 +1533,105 @@ describe('app/(tabs)/home', () => {
 
       expect(r.root.findAllByProps({ testID: 'delete-confirm-modal' })).toHaveLength(0);
       expect(r.root.findAllByProps({ testID: 'delete-reminder-error' })).toHaveLength(0);
+    });
+  });
+
+  describe('empty state (ATO-17)', () => {
+    const EMPTY_COPY = 'No reminders yet — add one above';
+
+    function emptyMarkers(renderer: TestRendererNS.ReactTestRenderer) {
+      return renderer.root.findAllByProps({ testID: 'reminders-empty' });
+    }
+
+    it('shows the placeholder copy after the initial fetch returns zero results', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+      expect(emptyMarkers(r).length).toBeGreaterThan(0);
+      expect(allText(r)).toContain(EMPTY_COPY);
+    });
+
+    it('does NOT show the empty state while the initial fetch is loading', async () => {
+      let resolveFetch: (value: Reminder[]) => void = () => {};
+      (listReminders as ListRemindersMock).mockReturnValue(
+        new Promise<Reminder[]>((resolve) => {
+          resolveFetch = resolve;
+        })
+      );
+
+      const r = renderAs(signedInUser());
+      // Loading spinner is up; the placeholder must not flash alongside it.
+      expect(
+        r.root.findAllByProps({ testID: 'reminders-loading' }).length
+      ).toBeGreaterThan(0);
+      expect(emptyMarkers(r)).toHaveLength(0);
+      expect(allText(r)).not.toContain(EMPTY_COPY);
+
+      await act(async () => {
+        resolveFetch([]);
+        await Promise.resolve();
+      });
+      await flush();
+
+      // After the fetch settles empty, the placeholder appears.
+      expect(emptyMarkers(r).length).toBeGreaterThan(0);
+      expect(allText(r)).toContain(EMPTY_COPY);
+    });
+
+    it('does NOT show the empty state when the fetch fails (error state wins)', async () => {
+      (listReminders as ListRemindersMock).mockRejectedValueOnce(
+        new Error('Failed to list reminders')
+      );
+
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(allText(r)).toContain('Failed to list reminders');
+      expect(emptyMarkers(r)).toHaveLength(0);
+      expect(allText(r)).not.toContain(EMPTY_COPY);
+    });
+
+    it('transitions from empty to populated when the first reminder is created', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+      expect(emptyMarkers(r).length).toBeGreaterThan(0);
+
+      // The create modal's onCreated triggers a refetch that now returns one row.
+      (listReminders as ListRemindersMock).mockResolvedValueOnce([
+        makeReminder({ $id: 'r1', description: 'First one' }),
+      ]);
+      typeValidReminder(r);
+      pressAddReminder(r);
+      await act(async () => {
+        r.root.findByType(ReminderLocationModal).props.onCreated();
+        await Promise.resolve();
+      });
+      await flush();
+
+      const cards = r.root.findAllByType(CardReminder);
+      expect(cards).toHaveLength(1);
+      expect(cards[0].props.card.$id).toBe('r1');
+      expect(emptyMarkers(r)).toHaveLength(0);
+      expect(allText(r)).not.toContain(EMPTY_COPY);
+    });
+
+    it('keeps the Add reminder form visible alongside the empty state', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(emptyMarkers(r).length).toBeGreaterThan(0);
+      // AC-5: the header form is never replaced by the empty state.
+      expect(r.root.findAllByType(FormField)).toHaveLength(1);
+      const addBtn = r.root
+        .findAllByType(CustomButton)
+        .find((b) => b.props.title === 'Add reminder');
+      expect(addBtn).toBeTruthy();
+      expect(allText(r)).toContain('My Reminders');
     });
   });
 });
