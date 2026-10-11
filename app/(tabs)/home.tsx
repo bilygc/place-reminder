@@ -26,17 +26,29 @@ import { isDescriptionValid } from '@/utils/validateReminder';
 /**
  * Map a persisted reminder onto the card view-model. `locationLabel` is
  * nullable; when absent we fall back to a `lat,lng` string (same fallback as
- * ReminderLocationModal's preview).
+ * ReminderLocationModal's preview) when both coordinates are finite numbers,
+ * otherwise to 'Unknown location' (server-side data drift can yield null or
+ * non-numeric coordinates when a writer bypasses the DAL, and `toFixed` on
+ * those would crash during render).
  */
-const toCard = (reminder: Reminder): Card => ({
-  $id: reminder.$id,
-  do: reminder.description,
-  active: reminder.active,
-  at:
-    reminder.locationLabel && reminder.locationLabel.trim() !== ''
-      ? reminder.locationLabel
-      : `${reminder.latitude.toFixed(4)}, ${reminder.longitude.toFixed(4)}`,
-});
+const toCard = (reminder: Reminder): Card => {
+  const hasLabel =
+    typeof reminder.locationLabel === 'string' &&
+    reminder.locationLabel.trim() !== '';
+  const hasCoords =
+    Number.isFinite(reminder.latitude) &&
+    Number.isFinite(reminder.longitude);
+  return {
+    $id: reminder.$id,
+    do: reminder.description,
+    active: reminder.active,
+    at: hasLabel
+      ? (reminder.locationLabel as string)
+      : hasCoords
+        ? `${(reminder.latitude as number).toFixed(4)}, ${(reminder.longitude as number).toFixed(4)}`
+        : 'Unknown location',
+  };
+};
 
 const Home = observer(() => {
   const [reminder, setReminder] = useState('');

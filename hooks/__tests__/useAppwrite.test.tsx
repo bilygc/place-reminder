@@ -160,8 +160,31 @@ describe('useAppwrite', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('db unavailable');
     });
 
-    it('wraps a non-Error thrown value via ensureError (Unknown error: ...)', async () => {
-      const fn = jest.fn().mockRejectedValue('boom-string');
+    it('does not log raw error detail in production but still sets error state and re-throws', async () => {
+      const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      try {
+        const fn = jest.fn().mockRejectedValue(new Error('db unavailable'));
+        const { result } = renderHook(() => useAppwrite(fn as any));
+
+        let thrown: Error | undefined;
+        await act(async () => {
+          try {
+            await result.current.refetch();
+          } catch (err) {
+            thrown = err as Error;
+          }
+        });
+
+        expect(result.current.error).toBe('db unavailable');
+        expect(thrown?.message).toBe('db unavailable');
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } finally {
+        (globalThis as { __DEV__?: boolean }).__DEV__ = originalDev;
+      }
+    });
+
+    it('wraps a non-Error thrown value via ensureError (Unknown error: ...)', async () => {      const fn = jest.fn().mockRejectedValue('boom-string');
       const { result } = renderHook(() => useAppwrite(fn as any));
 
       await act(async () => {

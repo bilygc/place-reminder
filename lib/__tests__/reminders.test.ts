@@ -143,6 +143,23 @@ describe('reminders DAL (ATO-12 session-derived ownership)', () => {
       );
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
+
+    it('does not log raw SDK detail in production but still throws the safe message', async () => {
+      const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      try {
+        databaseInstance.listDocuments.mockRejectedValue(
+          new Error('User account-123 missing scope (account)')
+        );
+
+        await expect(listReminders()).rejects.toThrow(
+          'Failed to list reminders'
+        );
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } finally {
+        (globalThis as { __DEV__?: boolean }).__DEV__ = originalDev;
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------

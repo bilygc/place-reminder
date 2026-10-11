@@ -251,6 +251,48 @@ describe('app/(tabs)/home', () => {
       );
     });
 
+    it('falls back to Unknown location when locationLabel and coords are null', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          locationLabel: null,
+          latitude: null as unknown as number,
+          longitude: null as unknown as number,
+        }),
+      ]);
+
+      let r!: TestRendererNS.ReactTestRenderer;
+      expect(() => {
+        r = renderAs(signedInUser());
+      }).not.toThrow();
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.at).toBe(
+        'Unknown location'
+      );
+    });
+
+    it('falls back to Unknown location when coords are non-numeric', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          locationLabel: null,
+          latitude: NaN,
+          longitude: 'oops' as unknown as number,
+        }),
+      ]);
+
+      let r!: TestRendererNS.ReactTestRenderer;
+      expect(() => {
+        r = renderAs(signedInUser());
+      }).not.toThrow();
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.at).toBe(
+        'Unknown location'
+      );
+    });
+
     it('shows a loading indicator while the initial fetch is in flight', async () => {
       let resolveFetch: (value: Reminder[]) => void = () => {};
       (listReminders as ListRemindersMock).mockReturnValue(

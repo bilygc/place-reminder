@@ -260,7 +260,9 @@ async function resolveOwnerId(
     return ownerId;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (err.message.startsWith('Cannot ')) {
       throw err;
     }
@@ -286,7 +288,9 @@ export const listReminders = async (): Promise<Reminder[]> => {
     return (result.documents as unknown as Reminder[]) ?? [];
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error('Failed to list reminders');
   }
 };
@@ -312,7 +316,9 @@ export const getReminder = async (id: string): Promise<Reminder> => {
     return reminder;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (isSessionExpiredError(err)) {
       throw new Error(
         'Cannot load reminder: session expired. Please sign in and try again.'
@@ -349,7 +355,9 @@ export const updateReminder = async (
     );
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (isSessionExpiredError(err)) {
       throw new Error(
         'Cannot update reminder: session expired. Please sign in and try again.'
@@ -376,7 +384,9 @@ export const updateReminder = async (
     return document as unknown as Reminder;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (isDocumentNotFoundError(err)) {
       throw new Error('Reminder not found');
     }
@@ -403,7 +413,9 @@ export const deleteReminder = async (id: string): Promise<unknown> => {
     );
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (isSessionExpiredError(err)) {
       throw new Error(
         'Cannot delete reminder: session expired. Please sign in and try again.'
@@ -429,7 +441,9 @@ export const deleteReminder = async (id: string): Promise<unknown> => {
     return result;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     if (isDocumentNotFoundError(err)) {
       throw new Error('Reminder not found');
     }
