@@ -1,10 +1,14 @@
 /**
  * Unit tests for app/(tabs)/home.tsx — the home screen.
  *
- * Covers: the reminder text input state updates via FormField
- * handleChangeText, the FlatList renders the hardcoded 3-item reminder data
- * (3 CardReminder components), the "Add reminder" CustomButton exists, and the
- * mic TouchableOpacity exists with the mic icon source.
+ * Covers: the reminder text input state via FormField handleChangeText, the
+ * "/My Reminders" list data-binding (listReminders → CardReminder mapping),
+ * loading + inline error/retry states, refetch on create and user switch, and
+ * the existing modal gating behavior.
+ *
+ * The DAL is mocked (`@/lib/reminders`) so the real `useAppwrite` hook and the
+ * screen's effect wiring are exercised end-to-end. Async fetches are flushed
+ * with `flush()` inside act().
  *
  * Fake timers are used (same pattern as components/Table/__tests__/Table.test.tsx)
  * to suppress VirtualizedList's setTimeout-scheduled deferred re-renders that
@@ -17,10 +21,14 @@
  * Rendered with raw react-test-renderer + act().
  */
 jest.mock('react-native-reanimated');
+jest.mock('@/lib/reminders', () => ({
+  __esModule: true,
+  listReminders: jest.fn(),
+}));
 
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { TouchableOpacity, Image } from 'react-native';
+import { TouchableOpacity, Image, Text } from 'react-native';
 import type * as TestRendererNS from 'react-test-renderer';
 import Home from '../(tabs)/home';
 import { FormField } from '@/components/FormField';
@@ -29,6 +37,29 @@ import CardReminder from '@/components/CardReminder/CardReminder';
 import ReminderLocationModal from '@/components/ReminderLocationModal';
 import { User, UserContext } from '@/store/user';
 import icons from '@/constants/icons';
+import type { Reminder } from '@/lib/appwrite.types';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { listReminders } = require('@/lib/reminders');
+
+type ListRemindersMock = jest.Mock<Promise<Reminder[]>, []>;
+
+function makeReminder(
+  overrides: Partial<Reminder> & { $id: string }
+): Reminder {
+  return {
+    userId: 'user-1',
+    description: 'Buy milk',
+    latitude: 1.23456,
+    longitude: 2.34567,
+    locationSource: 'map',
+    locationLabel: 'Home',
+    active: true,
+    $createdAt: '2024-01-01T00:00:00.000Z',
+    $updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 function render() {
   let renderer!: TestRendererNS.ReactTestRenderer;
@@ -50,22 +81,29 @@ function renderAs(user: User) {
   return renderer;
 }
 
-function signedInUser(): User {
+function signedInUser(id = 'user-1'): User {
   const user = new User();
   user.login({
-    session: { $id: 'user-1', isLoggedIn: true },
-    email: 'user@example.com',
-    userName: 'user',
+    session: { $id: id, isLoggedIn: true },
+    email: `${id}@example.com`,
+    userName: id,
     avatar: '',
   });
   return user;
 }
 
+/** Flush in-flight microtasks so a resolved/rejected fetch applies. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 function typeValidReminder(renderer: TestRendererNS.ReactTestRenderer) {
   act(() => {
-    renderer.root
-      .findByType(FormField)
-      .props.handleChangeText('Buy milk');
+    renderer.root.findByType(FormField).props.handleChangeText('Buy milk');
   });
 }
 
@@ -78,16 +116,42 @@ function pressAddReminder(renderer: TestRendererNS.ReactTestRenderer) {
   });
 }
 
+function findRetry(renderer: TestRendererNS.ReactTestRenderer) {
+  return renderer.root
+    .findAllByType(TouchableOpacity)
+    .find((t) => t.props.testID === 'reminders-retry');
+}
+
+function allText(renderer: TestRendererNS.ReactTestRenderer): string[] {
+  const extract = (children: unknown): string[] => {
+    if (typeof children === 'string') return [children];
+    if (typeof children === 'number') return [String(children)];
+    if (Array.isArray(children)) return children.flatMap(extract);
+    if (children && typeof children === 'object' && 'props' in (children as any)) {
+      return extract((children as any).props.children);
+    }
+    return [];
+  };
+  return renderer.root
+    .findAllByType(Text)
+    .flatMap((t) => extract(t.props.children));
+}
+
 describe('app/(tabs)/home', () => {
   let consoleLogSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.useFakeTimers();
+    (listReminders as ListRemindersMock).mockReset();
+    (listReminders as ListRemindersMock).mockResolvedValue([]);
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     jest.useRealTimers();
   });
 
@@ -107,12 +171,6 @@ describe('app/(tabs)/home', () => {
     expect(r.root.findByType(FormField).props.value).toBe('Buy milk');
   });
 
-  it('renders three CardReminder components from the hardcoded data', () => {
-    const r = render();
-    const cards = r.root.findAllByType(CardReminder);
-    expect(cards).toHaveLength(3);
-  });
-
   it('renders an "Add reminder" CustomButton', () => {
     const r = render();
     const btn = r.root
@@ -123,11 +181,6 @@ describe('app/(tabs)/home', () => {
 
   it('renders a mic TouchableOpacity with the mic icon source', () => {
     const r = render();
-    // The mic button is a TouchableOpacity wrapping an Image with source
-    // icons.mic. Find the TouchableOpacity whose Image child has that source.
-    // NOTE: In RN 0.86 TouchableOpacity is a plain function component (not
-    // memo-wrapped like Pressable), so findAllByType(TouchableOpacity) works
-    // directly — (TouchableOpacity as any).type is undefined here.
     const touchables = r.root.findAllByType(TouchableOpacity);
     const micBtn = touchables.find((t) => {
       const imgs = t.findAllByType(Image);
@@ -136,30 +189,211 @@ describe('app/(tabs)/home', () => {
     expect(micBtn).toBeTruthy();
   });
 
-  it('does not open the location modal when signed out, even with a valid description', () => {
-    // Default UserContext value is logged out (userId '', isLoggedIn false).
-    const r = render();
-    typeValidReminder(r);
-    pressAddReminder(r);
+  describe('reminder list', () => {
+    it('does not fetch when signed out', () => {
+      const r = render();
+      expect(listReminders).not.toHaveBeenCalled();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+    });
 
-    expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
+    it('fetches the current user reminders and renders one card each, newest first', async () => {
+      const newest = makeReminder({
+        $id: 'r-new',
+        description: 'Newest',
+        $createdAt: '2024-02-01T00:00:00.000Z',
+      });
+      const oldest = makeReminder({
+        $id: 'r-old',
+        description: 'Oldest',
+        $createdAt: '2024-01-01T00:00:00.000Z',
+      });
+      (listReminders as ListRemindersMock).mockResolvedValue([newest, oldest]);
+
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+
+      expect(listReminders).toHaveBeenCalledWith();
+      const cards = r.root.findAllByType(CardReminder);
+      expect(cards).toHaveLength(2);
+      expect(cards[0].props.card.$id).toBe('r-new');
+      expect(cards[1].props.card.$id).toBe('r-old');
+    });
+
+    it('maps locationLabel → At and description → Do', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', locationLabel: 'Home', description: 'Buy milk' }),
+      ]);
+
+      const r = renderAs(signedInUser());
+      await flush();
+
+      const card = r.root.findByType(CardReminder).props.card;
+      expect(card.at).toBe('Home');
+      expect(card.do).toBe('Buy milk');
+      expect(card.active).toBe(true);
+    });
+
+    it('falls back to a lat,lng string when locationLabel is null', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          locationLabel: null,
+          latitude: 1.23456,
+          longitude: 2.34567,
+        }),
+      ]);
+
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.at).toBe(
+        '1.2346, 2.3457'
+      );
+    });
+
+    it('shows a loading indicator while the initial fetch is in flight', async () => {
+      let resolveFetch: (value: Reminder[]) => void = () => {};
+      (listReminders as ListRemindersMock).mockReturnValue(
+        new Promise<Reminder[]>((resolve) => {
+          resolveFetch = resolve;
+        })
+      );
+
+      const r = renderAs(signedInUser());
+      expect(
+        r.root.findAllByProps({ testID: 'reminders-loading' }).length
+      ).toBeGreaterThan(0);
+
+      await act(async () => {
+        resolveFetch([]);
+        await Promise.resolve();
+      });
+
+      expect(
+        r.root.findAllByProps({ testID: 'reminders-loading' })
+      ).toHaveLength(0);
+    });
+
+    it('shows an inline error with retry and recovers on retry', async () => {
+      (listReminders as ListRemindersMock).mockRejectedValueOnce(
+        new Error('Failed to list reminders')
+      );
+
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(allText(r)).toContain('Failed to list reminders');
+      const retry = findRetry(r);
+      expect(retry).toBeTruthy();
+
+      (listReminders as ListRemindersMock).mockResolvedValueOnce([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      await act(async () => {
+        retry?.props.onPress();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(listReminders).toHaveBeenCalledTimes(2);
+      expect(allText(r)).not.toContain('Failed to list reminders');
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+    });
+
+    it('refetches the list after a reminder is created', async () => {
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(listReminders).toHaveBeenCalledTimes(1);
+
+      typeValidReminder(r);
+      pressAddReminder(r);
+      const modal = r.root.findByType(ReminderLocationModal);
+
+      await act(async () => {
+        modal.props.onCreated();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(listReminders).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not leak the previous user rows after switching accounts', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', userId: 'user-1' }),
+      ]);
+
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(1);
+
+      // Switch to user-2; the DAL (worst case) still returns user-1 rows for
+      // the new call — the screen must filter them out, not show them.
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', userId: 'user-1' }),
+      ]);
+      const userB = signedInUser('user-2');
+      act(() => {
+        r.update(
+          <UserContext.Provider value={userB}>
+            <Home />
+          </UserContext.Provider>
+        );
+      });
+      await flush();
+
+      expect(listReminders).toHaveBeenLastCalledWith();
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+    });
   });
 
-  it('opens the location modal with the typed session userId when signed in', () => {
-    const r = renderAs(signedInUser());
-    typeValidReminder(r);
-    pressAddReminder(r);
+  describe('location modal gating', () => {
+    it('does not open the location modal when signed out, even with a valid description', () => {
+      const r = render();
+      typeValidReminder(r);
+      pressAddReminder(r);
 
-    const modals = r.root.findAllByType(ReminderLocationModal);
-    expect(modals).toHaveLength(1);
-    expect(modals[0].props.userId).toBe('user-1');
-    expect(modals[0].props.description).toBe('Buy milk');
+      expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
+    });
+
+    it('opens the location modal with the typed session userId when signed in', async () => {
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+      typeValidReminder(r);
+      pressAddReminder(r);
+
+      const modals = r.root.findAllByType(ReminderLocationModal);
+      expect(modals).toHaveLength(1);
+      expect(modals[0].props.userId).toBe('user-1');
+      expect(modals[0].props.description).toBe('Buy milk');
+    });
+
+    it('does not open the location modal when signed in but the description is invalid', async () => {
+      const r = renderAs(signedInUser());
+      await flush();
+      pressAddReminder(r);
+
+      expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
+    });
   });
 
-  it('does not open the location modal when signed in but the description is invalid', () => {
-    const r = renderAs(signedInUser());
-    pressAddReminder(r);
+  describe('card stubs', () => {
+    it('passes no-op callbacks that accept the reminder id', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
 
-    expect(r.root.findAllByType(ReminderLocationModal)).toHaveLength(0);
+      const card = r.root.findByType(CardReminder);
+      expect(typeof card.props.onPressBody).toBe('function');
+      expect(typeof card.props.onPressBell).toBe('function');
+      expect(typeof card.props.onPressTrash).toBe('function');
+      expect(() => {
+        card.props.onPressBody('r1');
+        card.props.onPressBell('r1');
+        card.props.onPressTrash('r1');
+      }).not.toThrow();
+    });
   });
 });

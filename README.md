@@ -4,6 +4,8 @@ Location-based reminder app built with [Expo](https://expo.dev) and [Expo Router
 
 ## Features
 
+- **Reminder list + card UI (ATO-13)**: Live reminder list on the home screen with per-user row filtering, inline loading/error states, and a `CardReminder` component with isolated tap targets (body, bell toggle, trash delete). See [docs/reminders-data-layer.md](docs/reminders-data-layer.md).
+- **Reminders DAL (ATO-11)**: Session-scoped data-access layer for list/get/update/delete/toggle operations. See [docs/reminders-data-layer.md](docs/reminders-data-layer.md).
 - **Create reminder flow (ATO-12)**: Type a description, pick a location via current GPS or map pin picker, and create an owner-scoped reminder. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md).
 - **Location-based reminders**: Set reminders that trigger when you enter or leave specific places using geofencing.
 - **Background location tracking**: Reminders fire even when the app is in the background (requires a development build on Android).
@@ -55,6 +57,7 @@ This command will move the starter code to the **app-example** directory and cre
 
 ## Documentation
 
+- [Reminders Data Layer (ATO-11)](docs/reminders-data-layer.md) — collection schema, DAL API (list/get/update/delete/toggle), ownership model, validation rules, and testing baseline.
 - [Create Reminder Flow (ATO-12)](docs/create-reminder-flow.md) — user flow, `createReminder` API, location helpers, validation, components, Appwrite schema/permissions, `react-native-maps` setup, and testing notes.
 - [Location Tracking & Geofencing Guide](docs/location-tracking-guide.md) — background tracking, geofencing, and `LocationService` singleton.
 - [Known Issues](docs/known-issues.md) — deferred tech-debt log.

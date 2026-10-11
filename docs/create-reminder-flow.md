@@ -193,7 +193,7 @@ Collection: `reminders` (`config.reminderCollectionId`, env `EXPO_PUBLIC_REMINDE
 |-----------|------|----------|---------|
 | `userId` | `string` | Yes | Owner id (Appwrite account `$id`). Filtered by `idx_userId`. |
 | `creator` | `string` | No | **New** — dual-write future (mirrors owner). Indexed by `idx_creator`. |
-| `description` | `string` | Yes | Size 2000. App enforces ≤500 via `isDescriptionValid`. Stored trimmed. |
+| `description` | `string` | Yes | Size 500. App enforces ≤500 via `isDescriptionValid`. Stored trimmed. |
 | `latitude` | `double` | Yes | -90..90 |
 | `longitude` | `double` | Yes | -180..180 |
 | `address` | `string` | No | **New** — optional free-form address. |

@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
+import { observer } from 'mobx-react-lite';
 import { images, icons } from '@/constants';
 import { FlatList, TouchableOpacity, Image } from 'react-native';
 import { View, Text } from 'react-native';
@@ -13,11 +14,31 @@ import Animated, {
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import CardReminder from '@/components/CardReminder/CardReminder';
+import type { Card } from '@/components/CardReminder/CardReminder.types';
 import ReminderLocationModal from '@/components/ReminderLocationModal';
+import { GreenLoading } from '@/components/Loading/Loading';
+import { useAppwrite } from '@/hooks/useAppwrite';
+import { listReminders } from '@/lib/reminders';
+import type { Reminder } from '@/lib/appwrite.types';
 import { UserContext } from '@/store/user';
 import { isDescriptionValid } from '@/utils/validateReminder';
 
-const Home = () => {
+/**
+ * Map a persisted reminder onto the card view-model. `locationLabel` is
+ * nullable; when absent we fall back to a `lat,lng` string (same fallback as
+ * ReminderLocationModal's preview).
+ */
+const toCard = (reminder: Reminder): Card => ({
+  $id: reminder.$id,
+  do: reminder.description,
+  active: reminder.active,
+  at:
+    reminder.locationLabel && reminder.locationLabel.trim() !== ''
+      ? reminder.locationLabel
+      : `${reminder.latitude.toFixed(4)}, ${reminder.longitude.toFixed(4)}`,
+});
+
+const Home = observer(() => {
   const [reminder, setReminder] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const user = useContext(UserContext);
@@ -36,6 +57,12 @@ const Home = () => {
   //   getLocationReminders,
   //   currentLocation,
   // } = useLocationReminders();
+
+  const { data, refetch, isLoading, error } = useAppwrite(listReminders);
+  // listReminders returns an array; useAppwrite normalizes an array result
+  // as-is at runtime (no double-wrap) but its generic return type is `T[]`.
+  // Re-narrow the normalized list back to the element type here.
+  const reminderList = data as unknown as Reminder[];
 
   const { AppLogo } = images;
   const scale = useSharedValue(0.5);
@@ -63,6 +90,24 @@ const Home = () => {
     );
   }, []);
 
+  // Refetch on mount and whenever the authenticated user changes (sign-in,
+  // sign-out, or switching accounts). Skipped while signed out. Errors surface
+  // through the hook's `error` state and are rendered inline below.
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+    void refetch().catch(() => {
+      // Handled by the `error` state.
+    });
+  }, [isSignedIn, userId, refetch]);
+
+  // Only ever show rows that belong to the current user — this keeps the
+  // previous user's list from leaking during a sign-out/user switch before the
+  // new fetch resolves.
+  const cards =
+    isSignedIn && userId
+      ? reminderList.filter((item) => item.userId === userId).map(toCard)
+      : [];
+
   const handleChangeText = (text: string) => {
     setReminder(text);
   };
@@ -76,29 +121,30 @@ const Home = () => {
     }
   };
 
+  const handleRetry = () => {
+    if (!userId) return;
+    void refetch().catch(() => {
+      // Handled by the `error` state.
+    });
+  };
+
+  // Stubbed tap targets for later stories (edit / toggle / delete). The
+  // signature is ($id) to match the CardReminder prop contract; wire these to
+  // updateReminder / toggleReminderActive / deleteReminder when those land.
+  const handlePressBody = (_id: string): void => {
+    void _id;
+  };
+  const handlePressBell = (_id: string): void => {
+    void _id;
+  };
+  const handlePressTrash = (_id: string): void => {
+    void _id;
+  };
+
   return (
     <SafeAreaView>
       <FlatList
-        data={[
-          {
-            at: 'Evergreen Terrace, 742',
-            do: 'Ask for beer to Homer',
-            active: false,
-            $id: 'iousdjcbcikaiuywe734g',
-          },
-          {
-            at: 'Evergreen Terrace, 742',
-            do: 'Ask for beer to Homer',
-            active: true,
-            $id: 'ioucbcikaiuywe734g',
-          },
-          {
-            at: 'Evergreen Terrace, 742',
-            do: 'Ask for beer to Homer',
-            active: false,
-            $id: 'ioukaiuywe734g',
-          },
-        ]}
+        data={cards}
         keyExtractor={(item) => item.$id}
         contentContainerStyle={{
           backgroundColor: '#E1FFF3',
@@ -107,7 +153,12 @@ const Home = () => {
         }}
         renderItem={({ item }) => (
           <View className="flex my-4">
-            <CardReminder card={item} />
+            <CardReminder
+              card={item}
+              onPressBody={handlePressBody}
+              onPressBell={handlePressBell}
+              onPressTrash={handlePressTrash}
+            />
           </View>
         )}
         ListHeaderComponent={() => (
@@ -177,6 +228,29 @@ const Home = () => {
                 </Text>
               </View>
             </View>
+            {/* Loading / error live inline under the heading, above the list. */}
+            {isLoading && (
+              <View className="py-4" testID="reminders-loading">
+                <GreenLoading />
+              </View>
+            )}
+            {error && !isLoading && (
+              <View className="py-4 items-center" testID="reminders-error">
+                <Text className="text-light text-center font-inmedium mb-2">
+                  {error}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleRetry}
+                  activeOpacity={0.7}
+                  testID="reminders-retry"
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading reminders"
+                  className="bg-secondary rounded-full px-6 py-3"
+                >
+                  <Text className="text-white font-insemiBold">Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
         ListEmptyComponent={() => (
@@ -195,11 +269,16 @@ const Home = () => {
           onCreated={() => {
             setReminder('');
             setIsModalVisible(false);
+            if (userId) {
+              void refetch().catch(() => {
+                // Handled by the `error` state.
+              });
+            }
           }}
         />
       )}
     </SafeAreaView>
   );
-};
+});
 
 export default Home;
