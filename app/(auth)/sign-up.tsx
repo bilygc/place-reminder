@@ -84,7 +84,9 @@ const SignUp = observer(() => {
       router.replace('/home');
     } catch (error: unknown) {
       const err = ensureError(error);
-      console.error(err.message);
+      if (__DEV__) {
+        console.error(err.message);
+      }
       throw new Error(err.message);
     } finally {
       setIsLoading(false);

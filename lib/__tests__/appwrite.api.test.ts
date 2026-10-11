@@ -126,6 +126,23 @@ describe('appwrite.api', () => {
       await expect(signOut()).rejects.toThrow('no active session');
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
+
+    it('does not log raw SDK detail in production but still throws the same error', async () => {
+      const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      try {
+        accountInstance.deleteSession.mockRejectedValue(
+          new Error('no active session for account-123')
+        );
+
+        await expect(signOut()).rejects.toThrow(
+          'no active session for account-123'
+        );
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } finally {
+        (globalThis as { __DEV__?: boolean }).__DEV__ = originalDev;
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------

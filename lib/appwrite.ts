@@ -119,7 +119,9 @@ export const createUser: CreateUserFunction = async (
     return newUser;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -227,7 +229,9 @@ export const createReminder: CreateReminderFunction = async (input) => {
     return newReminder;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -284,7 +288,9 @@ export const signIn: SignInFunction = async (email, password) => {
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -314,7 +320,9 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     if (isUnauthenticatedError(err)) {
       return null;
     }
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -325,7 +333,9 @@ export const signOut: SignOutFunction = async () => {
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -351,7 +361,9 @@ export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
     return fileUrl;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
