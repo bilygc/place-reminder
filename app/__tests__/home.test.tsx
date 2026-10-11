@@ -24,6 +24,7 @@ jest.mock('react-native-reanimated');
 jest.mock('@/lib/reminders', () => ({
   __esModule: true,
   listReminders: jest.fn(),
+  updateReminder: jest.fn(),
 }));
 
 import React from 'react';
@@ -35,6 +36,7 @@ import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import CardReminder from '@/components/CardReminder/CardReminder';
 import ReminderLocationModal from '@/components/ReminderLocationModal';
+import EditReminderModal from '@/components/EditReminderModal';
 import { User, UserContext } from '@/store/user';
 import icons from '@/constants/icons';
 import type { Reminder } from '@/lib/appwrite.types';
@@ -468,8 +470,8 @@ describe('app/(tabs)/home', () => {
     });
   });
 
-  describe('card stubs', () => {
-    it('passes no-op callbacks that accept the reminder id', async () => {
+  describe('card tap targets', () => {
+    it('passes callbacks that accept the reminder id', async () => {
       (listReminders as ListRemindersMock).mockResolvedValue([
         makeReminder({ $id: 'r1' }),
       ]);
@@ -481,10 +483,223 @@ describe('app/(tabs)/home', () => {
       expect(typeof card.props.onPressBell).toBe('function');
       expect(typeof card.props.onPressTrash).toBe('function');
       expect(() => {
-        card.props.onPressBody('r1');
         card.props.onPressBell('r1');
         card.props.onPressTrash('r1');
       }).not.toThrow();
+    });
+  });
+
+  describe('edit reminder flow (ATO-14)', () => {
+    it('does not open the edit popup when signed out', () => {
+      const r = render();
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+    });
+
+    it('opens the edit popup pre-filled with the reminder when the body is pressed', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          description: 'Buy milk',
+          locationLabel: 'Home',
+        }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+
+      const modals = r.root.findAllByType(EditReminderModal);
+      expect(modals).toHaveLength(1);
+      expect(modals[0].props.reminder.$id).toBe('r1');
+      expect(modals[0].props.reminder.description).toBe('Buy milk');
+      expect(modals[0].props.reminder.locationLabel).toBe('Home');
+    });
+
+    it('does NOT open the edit popup from the bell or trash targets', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressTrash('r1');
+      });
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+    });
+
+    it('closes the edit popup on cancel without mutating or refetching', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(listReminders).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onClose();
+        await Promise.resolve();
+      });
+
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+      expect(listReminders).toHaveBeenCalledTimes(1);
+    });
+
+    it('merges the updated reminder into the card without a full refetch', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          description: 'Buy milk',
+          locationLabel: 'Home',
+        }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(listReminders).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+
+      const updated = makeReminder({
+        $id: 'r1',
+        description: 'Buy oat milk',
+        locationLabel: 'Work',
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(updated);
+        await Promise.resolve();
+      });
+
+      // No refetch — the merge is local.
+      expect(listReminders).toHaveBeenCalledTimes(1);
+      // Popup closed and the one card reflects the new values immediately.
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+      const card = r.root.findByType(CardReminder).props.card;
+      expect(card.do).toBe('Buy oat milk');
+      expect(card.at).toBe('Work');
+    });
+
+    it('reopen after save prefills the saved values so a second save cannot revert them', async () => {
+      const fetched = makeReminder({
+        $id: 'r1',
+        description: 'Old description',
+        locationLabel: 'Home',
+        latitude: 1,
+        longitude: 2,
+        locationSource: 'map',
+        $updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+      (listReminders as ListRemindersMock).mockResolvedValue([fetched]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      // First edit: move location A→B and clear the label.
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+      const firstSave = makeReminder({
+        $id: 'r1',
+        description: 'Old description',
+        locationLabel: null,
+        latitude: 10,
+        longitude: 20,
+        locationSource: 'map',
+        $updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(firstSave);
+        await Promise.resolve();
+      });
+
+      // Reopen: the popup must prefill the SAVED document, not the stale
+      // fetched doc (the bug: reopening from `reminderList` alone).
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+      const reopened = r.root.findByType(EditReminderModal).props
+        .reminder as Reminder;
+      expect(reopened.latitude).toBe(10);
+      expect(reopened.longitude).toBe(20);
+      expect(reopened.locationLabel).toBeNull();
+
+      // Second edit changes ONLY the description; the full-snapshot save must
+      // keep location B, not revert to A (which prefilling from stale data
+      // would cause).
+      const secondSave = makeReminder({
+        ...firstSave,
+        description: 'New description',
+        $updatedAt: '2026-01-03T00:00:00.000Z',
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(secondSave);
+        await Promise.resolve();
+      });
+
+      const card = r.root.findByType(CardReminder).props.card;
+      expect(card.do).toBe('New description');
+      // Label cleared → coordinates fallback, NOT the stale "Home".
+      expect(card.at).toBe('10.0000, 20.0000');
+      // Purely local merge; the stale fetch was never re-read.
+      expect(listReminders).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a stale local override when a refetch returns a newer server document', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          description: 'Fetched',
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      // Local edit newer than the fetched doc.
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(
+          makeReminder({
+            $id: 'r1',
+            description: 'Local',
+            $updatedAt: '2026-01-02T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      expect(r.root.findByType(CardReminder).props.card.do).toBe('Local');
+
+      // A later refetch returns a NEWER server document (edited elsewhere);
+      // the stale local override must not shadow it.
+      (listReminders as ListRemindersMock).mockResolvedValueOnce([
+        makeReminder({
+          $id: 'r1',
+          description: 'Server newer',
+          $updatedAt: '2026-01-05T00:00:00.000Z',
+        }),
+      ]);
+      typeValidReminder(r);
+      pressAddReminder(r);
+      await act(async () => {
+        r.root.findByType(ReminderLocationModal).props.onCreated();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(listReminders).toHaveBeenCalledTimes(2);
+      expect(r.root.findByType(CardReminder).props.card.do).toBe('Server newer');
     });
   });
 });

@@ -263,17 +263,20 @@ npm test        # jest --ci (preset jest-expo, setup jest.setup.js)
 
 - `docs/location-tracking-guide.md` — background tracking, geofencing setup, and the `LocationService` singleton (foreground/background permissions, `startGeofencingAsync`, dev-build requirement). The create-reminder flow's `getCurrentLocationWithLabel` is foreground-only and does not start tracking.
 - `docs/known-issues.md` — pinned `lodash` CVE note and other deferred items.
+- `docs/edit-reminder-flow.md` — ATO-14: edit popup opened from card-body tap, same `MapPicker` + `getCurrentLocationWithLabel` as create, `updateReminder` save, no `active` control.
 - `README.md` — quick start, testing command, and feature overview.
 
 ## File Map
 
 | File | Role |
 |------|------|
-| `app/(tabs)/home.tsx` | Description input, validation, modal wiring, disabled mic button |
+| `app/(tabs)/home.tsx` | Description input, validation, modal wiring, disabled mic button, `handlePressBody` for edit popup |
 | `components/ReminderLocationModal.tsx` | Location-choice modal + `createReminder` orchestration |
-| `components/MapPicker.tsx` | Map pin picker (react-native-maps) |
+| `components/EditReminderModal.tsx` | Edit popup (ATO-14) — pre-fill, location edit, `updateReminder` save, no `active` control |
+| `components/MapPicker.tsx` | Map pin picker (react-native-maps); shared with create and edit flows |
 | `lib/appwrite.ts` | `createReminder` — validation, allowlisted write, owner-scoped permissions |
 | `lib/appwrite.types.ts` | `LocationSource`, `CreateReminderInput`, `Reminder` |
 | `lib/locationService.ts` | `LocationPermissionDeniedError`, `LocationUnavailableError`, `getCurrentLocationWithLabel` |
+| `lib/reminders.ts` | `updateReminder`, `UpdateReminderPatch`; used by edit flow (see `docs/edit-reminder-flow.md`) |
 | `utils/validateReminder.ts` | `isDescriptionValid`, `isLocationValid`, length constants |
 | `__mocks__/react-native-maps.js` | Jest manual mock for native maps |
