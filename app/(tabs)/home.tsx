@@ -11,6 +11,8 @@ import Animated, {
   withSequence,
   withDelay,
 } from 'react-native-reanimated';
+import type { AnimatedStyle } from 'react-native-reanimated';
+import type { ViewStyle } from 'react-native';
 import { FormField } from '@/components/FormField';
 import CustomButton from '@/components/CustomButton';
 import CardReminder from '@/components/CardReminder/CardReminder';
@@ -49,6 +51,142 @@ const toCard = (reminder: Reminder): Card => {
         : 'Unknown location',
   };
 };
+
+/**
+ * Header content for the home FlatList, hoisted to module level so FlatList
+ * always sees a STABLE component type.
+ *
+ * It was previously an inline `ListHeaderComponent={() => (...)}` closure
+ * inside `Home`: every keystroke (`setReminder` → re-render) produced a NEW
+ * function identity, which React treats as a NEW component type, unmounting
+ * and remounting the entire header subtree — including the reminder-name
+ * `FormField`/`TextInput`, which therefore lost focus after every character.
+ * All render-local values the header reads now flow in as props, so the input
+ * stays mounted while its value (and validation/loading/error states) update.
+ */
+type HomeHeaderProps = {
+  reminder: string;
+  isValid: boolean;
+  isLoading: boolean;
+  error: string | null;
+  containerStyle: AnimatedStyle<ViewStyle>;
+  iconStyle: AnimatedStyle<ViewStyle>;
+  AppLogo: React.ComponentType<{ width?: number; height?: number }>;
+  onChangeText: (text: string) => void;
+  onAddPress: () => void;
+  onRetry: () => void;
+};
+
+const HomeHeader = ({
+  reminder,
+  isValid,
+  isLoading,
+  error,
+  containerStyle,
+  iconStyle,
+  AppLogo,
+  onChangeText,
+  onAddPress,
+  onRetry,
+}: HomeHeaderProps) => (
+  <View>
+    {/* Logo & Form */}
+    <View className="flex w-full bg-background pt-16 pb-6">
+      {/* Logo */}
+      <View className="flex-1 justify-center items-center text-center">
+        <Animated.View
+          className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
+          style={containerStyle}
+        >
+          <Animated.View style={iconStyle}>
+            <AppLogo width={80} height={97} />
+          </Animated.View>
+          <View>
+            <Text className="font-inbold text-light mt-4 text-[32px]">
+              PLACE REMINDER
+            </Text>
+          </View>
+        </Animated.View>
+      </View>
+      {/* Form */}
+      <View className="flex gap-y-3 w-[333px] m-auto mt-10">
+        <View className="flex-grow ">
+          <FormField
+            placeholder="What do you want to be reminded?"
+            value={reminder}
+            handleChangeText={onChangeText}
+            inputStyles="rounded-full"
+          />
+          {!isValid && reminder.length > 0 && (
+            <Text className="text-light text-sm font-inmedium text-center mt-1">
+              Please enter a valid description.
+            </Text>
+          )}
+        </View>
+        <View className="flex-row gap-x-3">
+          <View className="flex-grow max-w-[280px]">
+            <CustomButton
+              title="Add reminder"
+              handlePress={onAddPress}
+              isLoading={!isValid}
+              textStyles="text-white"
+            />
+          </View>
+          <View className="flex-none w-[47px] h-[47px]">
+            <TouchableOpacity
+              activeOpacity={0.7}
+              className={
+                'bg-secondary rounded-full justify-center items-center px-8 py-6 opacity-50'
+              }
+              disabled={true}
+              accessibilityLabel="Microphone, unavailable"
+              accessibilityState={{ disabled: true }}
+            >
+              <Image source={icons.mic} resizeMode="contain" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </View>
+    <View className="flex self-center w-[333px] bg-light">
+      <View className="">
+        <Text className="text-green-700 font-insemiBold text-[32px]">
+          My Reminders
+        </Text>
+      </View>
+    </View>
+    {/* Loading / error live inline under the heading, above the list. */}
+    {isLoading && (
+      <View className="py-4" testID="reminders-loading">
+        <GreenLoading />
+      </View>
+    )}
+    {error && !isLoading && (
+      <View className="py-4 items-center" testID="reminders-error">
+        <Text className="text-light text-center font-inmedium mb-2">
+          {error}
+        </Text>
+        <TouchableOpacity
+          onPress={onRetry}
+          activeOpacity={0.7}
+          testID="reminders-retry"
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading reminders"
+          className="bg-secondary rounded-full px-6 py-3"
+        >
+          <Text className="text-white font-insemiBold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  </View>
+);
+
+/** Empty-list content, hoisted for the same stable-type reason as HomeHeader. */
+const HomeEmpty = () => (
+  <View className="bg-light">
+    <Text className="text-green-700">There's nothing to remind</Text>
+  </View>
+);
 
 const Home = observer(() => {
   const [reminder, setReminder] = useState('');
@@ -173,103 +311,21 @@ const Home = observer(() => {
             />
           </View>
         )}
-        ListHeaderComponent={() => (
-          <View>
-            {/* Logo & Form */}
-            <View className="flex w-full bg-background pt-16 pb-6">
-              {/* Logo */}
-              <View className="flex-1 justify-center items-center text-center">
-                <Animated.View
-                  className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
-                  style={containerStyle}
-                >
-                  <Animated.View style={iconStyle}>
-                    <AppLogo width={80} height={97} />
-                  </Animated.View>
-                  <View>
-                    <Text className="font-inbold text-light mt-4 text-[32px]">
-                      PLACE REMINDER
-                    </Text>
-                  </View>
-                </Animated.View>
-              </View>
-              {/* Form */}
-              <View className="flex gap-y-3 w-[333px] m-auto mt-10">
-                <View className="flex-grow ">
-                  <FormField
-                    placeholder="What do you want to be reminded?"
-                    value={reminder}
-                    handleChangeText={handleChangeText}
-                    inputStyles="rounded-full"
-                  />
-                  {!isValid && reminder.length > 0 && (
-                    <Text className="text-light text-sm font-inmedium text-center mt-1">
-                      Please enter a valid description.
-                    </Text>
-                  )}
-                </View>
-                <View className="flex-row gap-x-3">
-                  <View className="flex-grow max-w-[280px]">
-                    <CustomButton
-                      title="Add reminder"
-                      handlePress={handleButton}
-                      isLoading={!isValid}
-                      textStyles="text-white"
-                    />
-                  </View>
-                  <View className="flex-none w-[47px] h-[47px]">
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      className={
-                        'bg-secondary rounded-full justify-center items-center px-8 py-6 opacity-50'
-                      }
-                      disabled={true}
-                      accessibilityLabel="Microphone, unavailable"
-                      accessibilityState={{ disabled: true }}
-                    >
-                      <Image source={icons.mic} resizeMode="contain" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <View className="flex self-center w-[333px] bg-light">
-              <View className="">
-                <Text className="text-green-700 font-insemiBold text-[32px]">
-                  My Reminders
-                </Text>
-              </View>
-            </View>
-            {/* Loading / error live inline under the heading, above the list. */}
-            {isLoading && (
-              <View className="py-4" testID="reminders-loading">
-                <GreenLoading />
-              </View>
-            )}
-            {error && !isLoading && (
-              <View className="py-4 items-center" testID="reminders-error">
-                <Text className="text-light text-center font-inmedium mb-2">
-                  {error}
-                </Text>
-                <TouchableOpacity
-                  onPress={handleRetry}
-                  activeOpacity={0.7}
-                  testID="reminders-retry"
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry loading reminders"
-                  className="bg-secondary rounded-full px-6 py-3"
-                >
-                  <Text className="text-white font-insemiBold">Retry</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-        ListEmptyComponent={() => (
-          <View className="bg-light">
-            <Text className="text-green-700">There's nothing to remind</Text>
-          </View>
-        )}
+        ListHeaderComponent={
+          <HomeHeader
+            reminder={reminder}
+            isValid={isValid}
+            isLoading={isLoading}
+            error={error}
+            containerStyle={containerStyle}
+            iconStyle={iconStyle}
+            AppLogo={AppLogo}
+            onChangeText={handleChangeText}
+            onAddPress={handleButton}
+            onRetry={handleRetry}
+          />
+        }
+        ListEmptyComponent={<HomeEmpty />}
       />
       {isModalVisible && isSignedIn && (
         <ReminderLocationModal
