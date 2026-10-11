@@ -184,7 +184,7 @@ Thin wrapper over `updateReminder(id, { active })`.
 ## Testing
 
 - **Suite:** `lib/__tests__/reminders.test.ts` — covers the five restored DAL functions (list/get/update/delete/toggle): session-derived ownership, newest-first ordering, exact SDK call args, client-side validation, and error propagation (network / permission / not-found / no-session paths). `createReminder` is covered separately by `lib/__tests__/createReminder.test.ts`.
-- **Baseline:** `scripts/test-count-baseline.txt` is `445` (was `461` before the legacy-helper removal; was `408` before the restore; was `446` before the listReminders rework).
+- **Baseline:** `scripts/test-count-baseline.txt` is `449` (was `461` before the legacy-helper removal; was `408` before the restore; was `446` before the listReminders rework).
 - **Mock:** `__mocks__/react-native-appwrite.js` exposes stable singleton instances (`__database`, `__account`, etc.) and now includes `database.getDocument`, `database.deleteDocument`, `Permission`, and `Role`. Any test that needs the real SDK omits `jest.mock('react-native-appwrite')`.
 
 ```bash

@@ -40,9 +40,8 @@ queried attributes that **no longer existed** (`title`, `creator`,
 suites in `lib/__tests__/appwrite.api.test.ts` (verified no callers before
 removal). All access to the `reminders` collection goes through
 `lib/reminders.ts` (see `docs/reminders-data-layer.md` for the enforced DAL
-contract). Their unused types remain in `lib/appwrite.types.ts`
-(`VideoPost`, `GetAllPostsFunction`, etc.) — removing those is optional
-leftover debt.
+contract). Both the helpers and their type exports (`VideoPost`,
+`GetAllPostsFunction`, etc.) were removed in the latest commit.
 
 ## expo-doctor (resolved)
 
