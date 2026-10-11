@@ -145,6 +145,7 @@ Fetch-verify-then-mutate against the session owner. Only fields present in `patc
 - **Returns:** `Promise<Reminder>`
 - **Throws:** Validation errors before any SDK call; `Reminder not found` if the document does not exist or is not owned; `Cannot update reminder: no active session...` when signed out; `Failed to update reminder` otherwise.
 - **SDK calls:** `database.getDocument(...)` then `database.updateDocument(..., data)` where `data` contains only the defined patch keys.
+- **Used by:** the edit-reminder popup (ATO-14, `EditReminderModal`). The edit flow always omits `active` from its patch — the bell toggle is the only writer of that field. See `docs/edit-reminder-flow.md` for the full edit flow wiring and `reminderOverrides` reconciliation pattern.
 
 #### `deleteReminder(id)`
 
@@ -184,7 +185,7 @@ Thin wrapper over `updateReminder(id, { active })`.
 ## Testing
 
 - **Suite:** `lib/__tests__/reminders.test.ts` — covers the five restored DAL functions (list/get/update/delete/toggle): session-derived ownership, newest-first ordering, exact SDK call args, client-side validation, and error propagation (network / permission / not-found / no-session paths). `createReminder` is covered separately by `lib/__tests__/createReminder.test.ts`.
-- **Baseline:** `scripts/test-count-baseline.txt` is `449` (was `461` before the legacy-helper removal; was `408` before the restore; was `446` before the listReminders rework).
+- **Baseline:** `scripts/test-count-baseline.txt` is `449` (was `461` before the legacy-helper removal; was `408` before the restore; was `446` before the listReminders rework). ATO-14 adds `home.test.tsx` + `EditReminderModal.test.tsx` (28 tests); total climbs to **482**.
 - **Mock:** `__mocks__/react-native-appwrite.js` exposes stable singleton instances (`__database`, `__account`, etc.) and now includes `database.getDocument`, `database.deleteDocument`, `Permission`, and `Role`. Any test that needs the real SDK omits `jest.mock('react-native-appwrite')`.
 
 ```bash
