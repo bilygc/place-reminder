@@ -230,12 +230,29 @@ const HomeHeader = ({
   </View>
 );
 
-/** Empty-list content, hoisted for the same stable-type reason as HomeHeader. */
-const HomeEmpty = () => (
-  <View className="bg-light">
-    <Text className="text-green-700">There's nothing to remind</Text>
-  </View>
-);
+/**
+ * Empty-list content, hoisted for the same stable-type reason as HomeHeader.
+ *
+ * FlatList only mounts `ListEmptyComponent` when `data` is empty, so the
+ * remaining no-flash gate lives here: while the initial fetch is in flight
+ * (`isLoading`) or has failed (`error` — rendered with a retry button in
+ * `HomeHeader`), this returns null so the placeholder never flashes
+ * alongside the spinner or the error state. Fresh `isLoading`/`error` values
+ * flow in as props, keeping the element type stable across renders.
+ */
+type HomeEmptyProps = {
+  isLoading: boolean;
+  error: string | null;
+};
+
+const HomeEmpty = ({ isLoading, error }: HomeEmptyProps) => {
+  if (isLoading || error) return null;
+  return (
+    <View className="bg-light" testID="reminders-empty">
+      <Text className="text-green-700">No reminders yet — add one above</Text>
+    </View>
+  );
+};
 
 const Home = observer(() => {
   const [reminder, setReminder] = useState('');
@@ -718,7 +735,7 @@ const Home = observer(() => {
             onRetry={handleRetry}
           />
         }
-        ListEmptyComponent={<HomeEmpty />}
+        ListEmptyComponent={<HomeEmpty isLoading={isLoading} error={error} />}
       />
       {isModalVisible && isSignedIn && (
         <ReminderLocationModal
