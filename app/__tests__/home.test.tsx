@@ -810,6 +810,214 @@ describe('app/(tabs)/home', () => {
       expect(toggleReminderActive).not.toHaveBeenCalled();
       expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
     });
+
+    it('does not pin a stale active when the device clock is ahead (refetch converges to server)', async () => {
+      // A device clock running ahead must never let a local override outrank
+      // the server: after the toggle settles, a refetch carrying a NEWER
+      // server document wins, even when it disagrees with the toggle.
+      jest.setSystemTime(new Date('2100-06-01T00:00:00.000Z'));
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          active: true,
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      (toggleReminderActive as ToggleActiveMock).mockResolvedValue(
+        makeReminder({
+          $id: 'r1',
+          active: false,
+          $updatedAt: '2026-01-02T00:00:00.000Z',
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      // Another writer re-enabled the reminder after our toggle; the server
+      // document is newer than the toggle's persisted snapshot.
+      (listReminders as ListRemindersMock).mockResolvedValueOnce([
+        makeReminder({
+          $id: 'r1',
+          active: true,
+          $updatedAt: '2026-01-03T00:00:00.000Z',
+        }),
+      ]);
+      typeValidReminder(r);
+      pressAddReminder(r);
+      await act(async () => {
+        r.root.findByType(ReminderLocationModal).props.onCreated();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+    });
+
+    it('keeps the optimistic flip across a mid-flight refetch, then holds it once settled', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          active: true,
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      let resolveToggle!: (value: Reminder) => void;
+      (toggleReminderActive as ToggleActiveMock).mockReturnValue(
+        new Promise<Reminder>((resolve) => {
+          resolveToggle = resolve;
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      // A refetch resolving with the same pre-toggle snapshot mid-flight must
+      // not flicker the just-applied flip back.
+      (listReminders as ListRemindersMock).mockResolvedValueOnce([
+        makeReminder({
+          $id: 'r1',
+          active: true,
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      typeValidReminder(r);
+      pressAddReminder(r);
+      await act(async () => {
+        r.root.findByType(ReminderLocationModal).props.onCreated();
+        await Promise.resolve();
+      });
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      await act(async () => {
+        resolveToggle(
+          makeReminder({
+            $id: 'r1',
+            active: false,
+            $updatedAt: '2026-01-02T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+    });
+
+    it('clears the toggle error and local overrides on account switch', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      (toggleReminderActive as ToggleActiveMock).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      await flush();
+      expect(
+        r.root.findAllByProps({ testID: 'toggle-reminder-error' }).length
+      ).toBeGreaterThan(0);
+
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      act(() => {
+        r.update(
+          <UserContext.Provider value={signedInUser('user-2')}>
+            <Home />
+          </UserContext.Provider>
+        );
+      });
+      await flush();
+
+      expect(
+        r.root.findAllByProps({ testID: 'toggle-reminder-error' })
+      ).toHaveLength(0);
+      expect(r.root.findAllByType(CardReminder)).toHaveLength(0);
+    });
+
+    it('ignores a stale in-flight toggle result after account switch', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          userId: 'user-1',
+          active: true,
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      let resolveToggle!: (value: Reminder) => void;
+      (toggleReminderActive as ToggleActiveMock).mockReturnValue(
+        new Promise<Reminder>((resolve) => {
+          resolveToggle = resolve;
+        })
+      );
+      const r = renderAs(signedInUser('user-1'));
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      // Switch away mid-flight; the late write must be ignored afterwards.
+      (listReminders as ListRemindersMock).mockResolvedValue([]);
+      act(() => {
+        r.update(
+          <UserContext.Provider value={signedInUser('user-2')}>
+            <Home />
+          </UserContext.Provider>
+        );
+      });
+      await flush();
+
+      await act(async () => {
+        resolveToggle(
+          makeReminder({
+            $id: 'r1',
+            userId: 'user-1',
+            active: false,
+            $updatedAt: '2026-01-02T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      await flush();
+      expect(
+        r.root.findAllByProps({ testID: 'toggle-reminder-error' })
+      ).toHaveLength(0);
+
+      // Switch back: the server still says active:true and no stale override
+      // may shadow it.
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          userId: 'user-1',
+          active: true,
+          $updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      ]);
+      act(() => {
+        r.update(
+          <UserContext.Provider value={signedInUser('user-1')}>
+            <Home />
+          </UserContext.Provider>
+        );
+      });
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+    });
   });
 
   describe('edit reminder flow (ATO-14)', () => {

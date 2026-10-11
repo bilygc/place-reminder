@@ -54,11 +54,34 @@ const toCard = (reminder: Reminder): Card => {
 };
 
 /**
+ * Non-`active` fields an edit popup can change. When a toggle settles while a
+ * concurrent edit save landed mid-flight, only these fields are re-applied
+ * over the toggle's server snapshot — the server document stays the base, so
+ * no local copy can shadow server state indefinitely.
+ */
+const editFieldsOf = (
+  reminder: Reminder
+): Pick<
+  Reminder,
+  'description' | 'latitude' | 'longitude' | 'locationSource' | 'locationLabel'
+> => ({
+  description: reminder.description,
+  latitude: reminder.latitude,
+  longitude: reminder.longitude,
+  locationSource: reminder.locationSource,
+  locationLabel: reminder.locationLabel,
+});
+
+/**
  * True when a freshly fetched server document is at least as new as a locally
  * applied edit. ISO-8601 `$updatedAt` strings compare lexicographically, so a
  * plain string `>=` is sufficient (and avoids parsing values that may be
  * missing or drifted). A non-string timestamp is treated as "server wins" so a
  * malformed value can never pin a stale override in place.
+ *
+ * Every `$updatedAt` compared here is server-issued (fetched documents and
+ * `updateReminder` returns share the server clock). Local writes never stamp
+ * wall time, so a skewed device clock cannot outrank the server.
  */
 const serverIsAtLeastAsNew = (server: Reminder, override: Reminder): boolean => {
   if (typeof server.$updatedAt !== 'string') return true;
@@ -235,9 +258,13 @@ const Home = observer(() => {
   // remembers the last known persisted value so a failure can revert ONLY the
   // `active` field without dropping concurrent edit fields. Refs (not state)
   // so the async loop always sees the latest tap without stale closures.
+  // `sessionEpoch` is bumped on every `userId` change so a loop resolving
+  // after an account switch/sign-out ignores its stale result instead of
+  // merging it into the new session's list.
   const toggleInFlightRef = useRef<Set<string>>(new Set());
   const pendingToggleRef = useRef<Record<string, boolean | undefined>>({});
   const lastGoodActiveRef = useRef<Record<string, boolean>>({});
+  const sessionEpochRef = useRef(0);
   const user = useContext(UserContext);
   // Use the store's public typed accessors. Never reach into the private
   // `_session` field (or the raw Appwrite account object, which has no
@@ -265,9 +292,13 @@ const Home = observer(() => {
   // stale override can never shadow a newer server document. Any refetch
   // returns the authoritative list, so an override whose server copy is at
   // least as new is dropped; an override newer than the server copy (e.g. a
-  // save that landed after the read started) is kept. Runs only when the
-  // fetched list identity changes, i.e. on refetch resolution — never on a
-  // local edit, so a just-saved override is not cleared out from under the UI.
+  // save that landed after the read started) is kept. Overrides for ids with
+  // a toggle currently in flight are always kept: the loop owns reconciling
+  // in-flight taps, and dropping the just-applied optimistic flip on a stale
+  // (pre-toggle) read would flicker. Once the loop settles, a later refetch
+  // wins. Runs only when the fetched list identity changes, i.e. on refetch
+  // resolution — never on a local edit, so a just-saved override is not
+  // cleared out from under the UI.
   useEffect(() => {
     setReminderOverrides((prev) => {
       const ids = Object.keys(prev);
@@ -277,7 +308,17 @@ const Home = observer(() => {
       const next: Record<string, Reminder> = {};
       for (const id of ids) {
         const server = freshById.get(id);
-        if (!server || serverIsAtLeastAsNew(server, prev[id])) {
+        if (!server) {
+          changed = true;
+          continue;
+        }
+        // In-flight toggle authority (no wall-clock tie-break): the loop
+        // reconciles these ids itself when each request resolves.
+        if (toggleInFlightRef.current.has(id)) {
+          next[id] = prev[id];
+          continue;
+        }
+        if (serverIsAtLeastAsNew(server, prev[id])) {
           changed = true;
           continue;
         }
@@ -322,6 +363,20 @@ const Home = observer(() => {
       // Handled by the `error` state.
     });
   }, [isSignedIn, userId, refetch]);
+
+  // On account switch/sign-out, drop everything tied to the previous session:
+  // local overrides (they belong to another user's documents), the toggle
+  // inline error, and pending toggle bookkeeping. The epoch bump makes any
+  // in-flight toggle loop ignore its late result instead of merging it into
+  // the new session's list (see runToggleLoop's epoch guard).
+  useEffect(() => {
+    sessionEpochRef.current += 1;
+    toggleInFlightRef.current.clear();
+    pendingToggleRef.current = {};
+    lastGoodActiveRef.current = {};
+    setReminderOverrides({});
+    setToggleError(null);
+  }, [userId]);
 
   // Only ever show rows that belong to the current user — this keeps the
   // previous user's list from leaking during a sign-out/user switch before the
@@ -373,8 +428,11 @@ const Home = observer(() => {
   // is in flight, newer taps only update `pendingToggleRef`; when the flight
   // resolves, a mismatch fires one follow-up with the last requested value.
   // This guarantees final persisted state == last tap without debouncing
-  // (which would drop taps or add latency).
-  const runToggleLoop = async (id: string): Promise<void> => {
+  // (which would drop taps or add latency). `epoch` is the session epoch
+  // captured when the tap happened; any result resolving after an account
+  // switch/sign-out is ignored so stale writes never merge into the new
+  // session's list.
+  const runToggleLoop = async (id: string, epoch: number): Promise<void> => {
     if (toggleInFlightRef.current.has(id)) return;
     toggleInFlightRef.current.add(id);
     try {
@@ -384,59 +442,44 @@ const Home = observer(() => {
         const attempted = target;
         try {
           const persisted = await toggleReminderActive(id, attempted);
+          // Stale session: the user switched/signed out mid-flight. Ignore
+          // the result entirely (no merge, no error) — the session-change
+          // effect already cleared this session's toggle bookkeeping.
+          if (epoch !== sessionEpochRef.current) return;
           lastGoodActiveRef.current[id] = persisted.active;
           const latest = pendingToggleRef.current[id];
           if (latest !== undefined && latest !== attempted) {
-            // A newer tap landed mid-flight: keep the local non-active fields
-            // (a concurrent edit may have changed them) and the newest
-            // requested `active`, then loop to persist it.
+            // A newer tap landed mid-flight: the server snapshot is the
+            // base; re-apply only the newest requested `active` plus any
+            // concurrent edit's non-active fields, then loop to persist.
             const newest = latest;
-            const persistedAt =
-              typeof persisted.$updatedAt === 'string'
-                ? persisted.$updatedAt
-                : '';
             setReminderOverrides((prev) => {
               const existing = prev[id];
               if (!existing) {
                 return { ...prev, [id]: { ...persisted, active: newest } };
               }
-              const existingAt =
-                typeof existing.$updatedAt === 'string'
-                  ? existing.$updatedAt
-                  : '';
               return {
                 ...prev,
                 [id]: {
-                  ...existing,
+                  ...persisted,
+                  ...editFieldsOf(existing),
                   active: newest,
-                  $updatedAt:
-                    persistedAt >= existingAt ? persistedAt : existingAt,
                 },
               };
             });
             continue;
           }
-          // Settled with no newer tap: take the server's `active` + timestamp
-          // but keep local non-active fields (a concurrent edit save may have
-          // landed mid-flight with newer description/location).
-          const persistedAt =
-            typeof persisted.$updatedAt === 'string'
-              ? persisted.$updatedAt
-              : '';
+          // Settled with no newer tap: the server snapshot is the base; keep
+          // a concurrent edit's non-active fields when one landed mid-flight
+          // (they are server-persisted values from its own updateReminder
+          // call, so re-applying them cannot shadow server state — and the
+          // next post-loop refetch converges to the server either way).
           setReminderOverrides((prev) => {
             const existing = prev[id];
             if (!existing) return { ...prev, [id]: persisted };
-            const existingAt =
-              typeof existing.$updatedAt === 'string'
-                ? existing.$updatedAt
-                : '';
             return {
               ...prev,
-              [id]: {
-                ...existing,
-                active: persisted.active,
-                $updatedAt: persistedAt >= existingAt ? persistedAt : existingAt,
-              },
+              [id]: { ...persisted, ...editFieldsOf(existing) },
             };
           });
           if (pendingToggleRef.current[id] === attempted) {
@@ -444,6 +487,7 @@ const Home = observer(() => {
           }
           break;
         } catch (err) {
+          if (epoch !== sessionEpochRef.current) return;
           // Revert ONLY `active` to the last known persisted value so pending
           // edit fields survive; surface the failure inline (same pass-through
           // convention as EditReminderModal: actionable
@@ -465,14 +509,20 @@ const Home = observer(() => {
         }
       }
     } finally {
-      toggleInFlightRef.current.delete(id);
-      if (pendingToggleRef.current[id] === undefined) {
-        delete lastGoodActiveRef.current[id];
+      // Only the owning session cleans up: a stale loop must not delete a
+      // newer session's in-flight marker for the same id.
+      if (epoch === sessionEpochRef.current) {
+        toggleInFlightRef.current.delete(id);
+        if (pendingToggleRef.current[id] === undefined) {
+          delete lastGoodActiveRef.current[id];
+        }
       }
     }
   };
   const handlePressBell = (id: string): void => {
-    // No confirmation popup (unlike delete): flip immediately.
+    // No confirmation popup (unlike delete): flip immediately. Gated on a
+    // signed-in session; without one there is nothing to persist to.
+    if (!isSignedIn || !userId) return;
     const base = reminderOverrides[id] ?? reminderList.find((item) => item.$id === id);
     if (!base) return;
     // Flip relative to the latest requested value when a request is already
@@ -484,25 +534,21 @@ const Home = observer(() => {
       lastGoodActiveRef.current[id] = base.active;
     }
     pendingToggleRef.current[id] = desired;
-    // Optimistic merge writes ONLY `active` (plus a synthetic newer
-    // `$updatedAt` so a refetch that started before the toggle cannot drop
-    // the just-applied flip as stale). All other fields come from the pending
-    // edit override when present, so toggle and edit compose both ways.
-    const nowIso = new Date().toISOString();
+    // Optimistic merge writes ONLY `active`; every other field (including
+    // `$updatedAt`) is preserved as-is, so the toggle composes with pending
+    // edit overrides both ways. Deliberately no wall-clock `$updatedAt`
+    // synthesis: override-vs-server authority comes from in-flight identity
+    // (the reconcile effect keeps in-flight ids) plus server-issued
+    // timestamps, so a skewed device clock can never pin a stale override.
     setReminderOverrides((prev) => {
       const b = prev[id] ?? base;
-      const prevAt = typeof b.$updatedAt === 'string' ? b.$updatedAt : '';
       return {
         ...prev,
-        [id]: {
-          ...b,
-          active: desired,
-          $updatedAt: nowIso >= prevAt ? nowIso : prevAt,
-        },
+        [id]: { ...b, active: desired },
       };
     });
     setToggleError(null);
-    void runToggleLoop(id).catch(() => {
+    void runToggleLoop(id, sessionEpochRef.current).catch(() => {
       // runToggleLoop handles its own errors inline; this guards against an
       // unexpected rejection escaping as an unhandled promise.
     });
@@ -514,27 +560,16 @@ const Home = observer(() => {
   const handleReminderUpdated = (updated: Reminder): void => {
     // An edit save must not clobber a pending toggle: when a toggle is in
     // flight for this id, the last requested `active` wins over the stale
-    // snapshot the edit popup was prefilled from, while the edit's
-    // non-active fields are kept.
+    // snapshot the edit popup was prefilled from, while the edit's own
+    // (server-persisted) fields are kept as-is.
     setReminderOverrides((prev) => {
       const pending = pendingToggleRef.current[updated.$id];
       if (pending === undefined) {
         return { ...prev, [updated.$id]: updated };
       }
-      const existing = prev[updated.$id];
-      const updatedAt =
-        typeof updated.$updatedAt === 'string' ? updated.$updatedAt : '';
-      const existingAt =
-        existing && typeof existing.$updatedAt === 'string'
-          ? existing.$updatedAt
-          : '';
       return {
         ...prev,
-        [updated.$id]: {
-          ...updated,
-          active: pending,
-          $updatedAt: existingAt > updatedAt ? existingAt : updatedAt,
-        },
+        [updated.$id]: { ...updated, active: pending },
       };
     });
     setEditingReminder(null);
