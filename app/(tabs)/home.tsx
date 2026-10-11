@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { images, icons } from '@/constants';
-import { FlatList, TouchableOpacity, Image } from 'react-native';
+import { FlatList, Modal, TouchableOpacity, Image } from 'react-native';
 import { View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -21,7 +21,7 @@ import ReminderLocationModal from '@/components/ReminderLocationModal';
 import EditReminderModal from '@/components/EditReminderModal';
 import { GreenLoading } from '@/components/Loading/Loading';
 import { useAppwrite } from '@/hooks/useAppwrite';
-import { listReminders, toggleReminderActive } from '@/lib/reminders';
+import { listReminders, toggleReminderActive, deleteReminder } from '@/lib/reminders';
 import type { Reminder } from '@/lib/appwrite.types';
 import { UserContext } from '@/store/user';
 import { isDescriptionValid } from '@/utils/validateReminder';
@@ -251,6 +251,26 @@ const Home = observer(() => {
   // Inline error for the bell toggle (ATO-15). Rendered under the heading via
   // HomeHeader; cleared on the next toggle attempt.
   const [toggleError, setToggleError] = useState<string | null>(null);
+  // Delete confirmation state (ATO-16). `deleteCandidateId` is the reminder
+  // awaiting confirmation in the popup (null = popup closed); `deletingId`
+  // is the per-id in-flight marker serializing delete calls — while set, the
+  // Confirm button and the trash target are disabled so concurrent
+  // deleteDocument calls for the same id can never fire. `deleteError` is
+  // the popup's inline failure message. `deletedIds` records ids removed
+  // pessimistically so the card disappears without a full refetch and can
+  // never reappear on a later refetch (the server no longer returns them).
+  const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(
+    null
+  );
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Record<string, true>>({});
+  // Synchronous mirror of `deletingId` for the in-flight guard. State updates
+  // are async, so same-tick repeated confirms would both read stale `null`
+  // from the render closure; the ref is set synchronously before the async
+  // work starts (same pattern as ATO-15's `toggleInFlightRef`). `deletingId`
+  // state remains purely for rendering (disabled buttons / disarmed trash).
+  const deletingIdRef = useRef<string | null>(null);
   // Per-id toggle chase state (ATO-15 rapid-tap safety). `toggleInFlight`
   // serializes per-id writes (updateReminder is fetch-verify-then-mutate, so
   // concurrent writes can interleave); `pendingToggle` records the latest
@@ -368,7 +388,10 @@ const Home = observer(() => {
   // local overrides (they belong to another user's documents), the toggle
   // inline error, and pending toggle bookkeeping. The epoch bump makes any
   // in-flight toggle loop ignore its late result instead of merging it into
-  // the new session's list (see runToggleLoop's epoch guard).
+  // the new session's list (see runToggleLoop's epoch guard). The delete
+  // popup/error/in-flight marker and the pessimistic deletion record belong
+  // to the previous user too, so they are cleared as well (the confirm
+  // handler's epoch guard ignores a stale delete result the same way).
   useEffect(() => {
     sessionEpochRef.current += 1;
     toggleInFlightRef.current.clear();
@@ -376,16 +399,24 @@ const Home = observer(() => {
     lastGoodActiveRef.current = {};
     setReminderOverrides({});
     setToggleError(null);
+    setDeleteCandidateId(null);
+    setDeletingId(null);
+    deletingIdRef.current = null;
+    setDeleteError(null);
+    setDeletedIds({});
   }, [userId]);
 
   // Only ever show rows that belong to the current user — this keeps the
   // previous user's list from leaking during a sign-out/user switch before the
   // new fetch resolves. Locally-applied edits (reminderOverrides) win over the
-  // fetched document so a save is reflected without a full refetch.
+  // fetched document so a save is reflected without a full refetch. Reminders
+  // removed via the delete confirmation are excluded pessimistically (no
+  // refetch on success), which also lets the empty state render on its own
+  // once the last card is gone.
   const cards =
     isSignedIn && userId
       ? reminderList
-        .filter((item) => item.userId === userId)
+        .filter((item) => item.userId === userId && deletedIds[item.$id] !== true)
         .map((item) => toCard(reminderOverrides[item.$id] ?? item))
       : [];
 
@@ -411,8 +442,9 @@ const Home = observer(() => {
 
   // Tap targets for the card. The body opens the edit popup (ATO-14); the bell
   // toggles `active` optimistically with a last-write-wins chase (ATO-15); the
-  // trash remains stubbed until its own story lands. Signatures are ($id) to
-  // match the CardReminder prop contract.
+  // trash opens the delete confirmation popup (ATO-16) — there is deliberately
+  // no one-tap delete path. Signatures are ($id) to match the CardReminder
+  // prop contract.
   const handlePressBody = (id: string): void => {
     const target = reminderList.find((item) => item.$id === id);
     // If the row is no longer in the fetched list there is nothing to pre-fill
@@ -553,8 +585,78 @@ const Home = observer(() => {
       // unexpected rejection escaping as an unhandled promise.
     });
   };
-  const handlePressTrash = (_id: string): void => {
-    void _id;
+  const handlePressTrash = (id: string): void => {
+    // While a delete is in flight every trash tap is ignored (the in-flight
+    // card's target is additionally disarmed at render time), so a second
+    // confirmation can never fire a concurrent deleteDocument call. The ref
+    // (not state) is checked so same-tick taps see the in-flight marker.
+    if (deletingIdRef.current !== null) return;
+    setDeleteError(null);
+    setDeleteCandidateId(id);
+  };
+
+  // Cancel closes the popup with zero network calls; the list is untouched.
+  // Disabled while a delete is in flight (the in-flight request still owns
+  // closing the popup on success, or leaves it open with an error on
+  // failure).
+  const handleCancelDelete = (): void => {
+    if (deletingIdRef.current !== null) return;
+    setDeleteCandidateId(null);
+    setDeleteError(null);
+  };
+
+  // Confirm persists via deleteReminder, then removes the card pessimistically
+  // by recording the id locally — no full refetch, so no
+  // disappear-then-reappear and no duplicate cards. On failure the popup stays
+  // open with the error inline and the card stays in the list. `epoch` is the
+  // session epoch captured at confirm time; a result resolving after an
+  // account switch/sign-out is ignored so a stale delete never touches the
+  // new session's state.
+  const handleConfirmDelete = (): void => {
+    // Guard on the synchronous ref: state from the render closure is stale
+    // for same-tick repeated invocations (both would see `null`), while the
+    // ref is set synchronously before the async work starts.
+    if (deleteCandidateId === null || deletingIdRef.current !== null) return;
+    const id = deleteCandidateId;
+    const epoch = sessionEpochRef.current;
+    deletingIdRef.current = id;
+    setDeletingId(id);
+    setDeleteError(null);
+    void (async () => {
+      try {
+        await deleteReminder(id);
+        if (epoch !== sessionEpochRef.current) return;
+        setDeletedIds((prev) => ({ ...prev, [id]: true }));
+        // Drop any local override for the removed id so a late toggle/edit
+        // resolution for it cannot resurrect the card.
+        setReminderOverrides((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        setDeleteCandidateId(null);
+      } catch (err) {
+        if (epoch !== sessionEpochRef.current) return;
+        // Same pass-through convention as the toggle/edit errors: actionable
+        // `Cannot delete reminder:` messages verbatim, generic otherwise.
+        // State is preserved for retry; the popup stays open and the card
+        // stays in the list.
+        const message = err instanceof Error ? err.message : String(err);
+        setDeleteError(
+          message.startsWith('Cannot delete reminder:')
+            ? message
+            : 'Failed to delete reminder. Please try again.'
+        );
+      } finally {
+        // Only the owning session clears the marker: a stale confirm must
+        // not re-enable a newer session's popup mid-flight.
+        if (epoch === sessionEpochRef.current) {
+          deletingIdRef.current = null;
+          setDeletingId(null);
+        }
+      }
+    })();
   };
 
   const handleReminderUpdated = (updated: Reminder): void => {
@@ -591,7 +693,13 @@ const Home = observer(() => {
               card={item}
               onPressBody={handlePressBody}
               onPressBell={handlePressBell}
-              onPressTrash={handlePressTrash}
+              // While this card's delete is in flight its trash target is
+              // disarmed (handlePressTrash additionally ignores every trash
+              // tap mid-flight), so repeat taps can never fire a concurrent
+              // deleteDocument for the same id.
+              onPressTrash={
+                deletingId === item.$id ? () => {} : handlePressTrash
+              }
             />
           </View>
         )}
@@ -638,6 +746,52 @@ const Home = observer(() => {
           onClose={() => setEditingReminder(null)}
           onUpdated={handleReminderUpdated}
         />
+      )}
+      {deleteCandidateId && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelDelete}
+        >
+          <View
+            testID="delete-confirm-modal"
+            className="flex-1 justify-center items-center bg-black/50 px-6"
+          >
+            <View className="w-full max-w-[333px] bg-light rounded-2xl p-6">
+              <Text className="text-dark text-xl font-inbold text-center mb-2">
+                Delete this reminder?
+              </Text>
+              <Text className="text-dark text-center font-inmedium mb-6">
+                This action cannot be undone.
+              </Text>
+              {deleteError && (
+                <Text
+                  testID="delete-reminder-error"
+                  className="text-red-300 text-center font-inmedium mb-4"
+                >
+                  {deleteError}
+                </Text>
+              )}
+              <View className="flex-row gap-3">
+                <CustomButton
+                  title="Cancel"
+                  handlePress={handleCancelDelete}
+                  isLoading={deletingId !== null}
+                  containerStyles="flex-1 bg-dark"
+                  textStyles="text-light"
+                />
+                <CustomButton
+                  title="Confirm"
+                  handlePress={handleConfirmDelete}
+                  isLoading={deletingId !== null}
+                  containerStyles="flex-1"
+                  textStyles="text-white"
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </SafeAreaView>
   );

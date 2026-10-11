@@ -4,10 +4,11 @@ Tapping the **body** of a reminder card opens an edit popup that pre-fills the
 current `description` and `location`, lets the user change either, and saves
 via `updateReminder`. Implements Linear ticket ATO-14.
 
-> **Out of scope:** trash target (stubbed until its own story — delete will
-> use a confirmation popup, unlike the bell toggle which has none). Bell-toggle
+> **Out of scope:** trash target was stubbed until its own story — delete
+> uses a confirmation popup, unlike the bell toggle which has none. Bell-toggle
 > (ATO-15) is implemented separately in `home.tsx` (`handlePressBell`) and is
-> documented in `docs/toggle-reminder-active.md`. Geofence re-sync on location
+> documented in `docs/toggle-reminder-active.md`. Delete confirmation (ATO-16)
+> is documented in `docs/delete-reminder-flow.md`. Geofence re-sync on location
 > edit (geofencing is dormant; tracked as a follow-up).
 
 ## User-Facing Flow

@@ -5,6 +5,7 @@ Location-based reminder app built with [Expo](https://expo.dev) and [Expo Router
 ## Features
 
 - **Reminder list + card UI (ATO-13)**: Live reminder list on the home screen with per-user row filtering, inline loading/error states, and a `CardReminder` component with isolated tap targets (body, bell toggle, trash delete). See [docs/reminders-data-layer.md](docs/reminders-data-layer.md).
+- **Delete reminder with confirmation (ATO-16)**: Tapping the trash icon on a card opens a confirmation popup ("Delete this reminder?" / Confirm / Cancel). Confirm calls `deleteReminder(id)`; on success the card is removed pessimistically via local `deletedIds` state with no refetch. Per-id in-flight guard, session-epoch guard, and inline error handling mirror the patterns established by the toggle flow. See [docs/delete-reminder-flow.md](docs/delete-reminder-flow.md).
 - **Reminders DAL (ATO-11)**: Session-scoped data-access layer for list/get/update/delete/toggle operations. See [docs/reminders-data-layer.md](docs/reminders-data-layer.md).
 - **Create reminder flow (ATO-12)**: Type a description, pick a location via current GPS or map pin picker, and create an owner-scoped reminder. See [docs/create-reminder-flow.md](docs/create-reminder-flow.md).
 - **Location-based reminders**: Set reminders that trigger when you enter or leave specific places using geofencing.
