@@ -25,6 +25,7 @@ jest.mock('@/lib/reminders', () => ({
   __esModule: true,
   listReminders: jest.fn(),
   updateReminder: jest.fn(),
+  toggleReminderActive: jest.fn(),
 }));
 
 import React from 'react';
@@ -42,9 +43,10 @@ import icons from '@/constants/icons';
 import type { Reminder } from '@/lib/appwrite.types';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { listReminders } = require('@/lib/reminders');
+const { listReminders, toggleReminderActive } = require('@/lib/reminders');
 
 type ListRemindersMock = jest.Mock<Promise<Reminder[]>, []>;
+type ToggleActiveMock = jest.Mock<Promise<Reminder>, [string, boolean]>;
 
 function makeReminder(
   overrides: Partial<Reminder> & { $id: string }
@@ -147,6 +149,15 @@ describe('app/(tabs)/home', () => {
     jest.useFakeTimers();
     (listReminders as ListRemindersMock).mockReset();
     (listReminders as ListRemindersMock).mockResolvedValue([]);
+    (toggleReminderActive as ToggleActiveMock).mockReset();
+    (toggleReminderActive as ToggleActiveMock).mockImplementation(
+      async (_id: string, active: boolean) =>
+        makeReminder({
+          $id: _id,
+          active,
+          $updatedAt: '2026-02-01T00:00:00.000Z',
+        })
+    );
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -483,9 +494,321 @@ describe('app/(tabs)/home', () => {
       expect(typeof card.props.onPressBell).toBe('function');
       expect(typeof card.props.onPressTrash).toBe('function');
       expect(() => {
-        card.props.onPressBell('r1');
         card.props.onPressTrash('r1');
       }).not.toThrow();
+    });
+
+    it('trash target is a harmless no-op (delete lands in a later story)', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1' }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(() => {
+        r.root.findByType(CardReminder).props.onPressTrash('r1');
+      }).not.toThrow();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      expect(toggleReminderActive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bell toggle active/inactive (ATO-15)', () => {
+    it('optimistically flips active immediately and persists via toggleReminderActive', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      let resolveToggle!: (value: Reminder) => void;
+      (toggleReminderActive as ToggleActiveMock).mockReturnValue(
+        new Promise<Reminder>((resolve) => {
+          resolveToggle = resolve;
+        })
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+
+      // Tap: UI must flip BEFORE the network resolves (optimistic).
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+      expect(toggleReminderActive).toHaveBeenCalledTimes(1);
+      expect(toggleReminderActive).toHaveBeenLastCalledWith('r1', false);
+
+      await act(async () => {
+        resolveToggle(
+          makeReminder({
+            $id: 'r1',
+            active: false,
+            $updatedAt: '2026-02-01T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+    });
+
+    it('toggles false → true', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: false }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      expect(toggleReminderActive).toHaveBeenLastCalledWith('r1', true);
+
+      await flush();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+    });
+
+    it('reverts the UI and shows the inline error when persistence fails (actionable message passes through)', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      (toggleReminderActive as ToggleActiveMock).mockRejectedValueOnce(
+        new Error('Cannot update reminder: session expired. Please sign in and try again.')
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      // Optimistic flip happens first even though the request will fail.
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      await flush();
+
+      // Reverted to the previous state, with the actionable message inline.
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      const errors = r.root.findAllByProps({ testID: 'toggle-reminder-error' });
+      expect(errors.length).toBeGreaterThan(0);
+      const extract = (children: unknown): string => {
+        if (typeof children === 'string') return children;
+        if (Array.isArray(children)) return children.map(extract).join('');
+        if (
+          children &&
+          typeof children === 'object' &&
+          'props' in (children as Record<string, unknown>)
+        ) {
+          return extract(
+            (children as { props: { children: unknown } }).props.children
+          );
+        }
+        return '';
+      };
+      const text = errors.map((e) => extract(e.props.children)).join(' ');
+      expect(text).toContain('Cannot update reminder:');
+    });
+
+    it('shows a generic inline error and reverts when persistence fails with an unknown error', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      (toggleReminderActive as ToggleActiveMock).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      expect(
+        r.root.findAllByProps({ testID: 'toggle-reminder-error' }).length
+      ).toBeGreaterThan(0);
+    });
+
+    it('does NOT open any confirmation or the edit popup from the bell', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      await flush();
+
+      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
+    });
+
+    it('rapid double-tap ends with the last requested state persisted (last-write-wins)', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      const calls: boolean[] = [];
+      let firstResolve!: (value: Reminder) => void;
+      (toggleReminderActive as ToggleActiveMock).mockImplementationOnce(
+        () =>
+          new Promise<Reminder>((resolve) => {
+            firstResolve = resolve;
+          })
+      );
+      (toggleReminderActive as ToggleActiveMock).mockImplementation(
+        async (_id: string, active: boolean) => {
+          calls.push(active);
+          return makeReminder({
+            $id: _id,
+            active,
+            $updatedAt: '2026-02-01T00:00:00.000Z',
+          });
+        }
+      );
+      const r = renderAs(signedInUser());
+      await flush();
+
+      // First tap: true → false (in-flight, held open).
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(false);
+
+      // Second tap before the first resolves: false → true.
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+
+      // Resolve the first request with the stale intermediate value; the
+      // chase must follow up with the last requested value (true).
+      await act(async () => {
+        firstResolve(
+          makeReminder({
+            $id: 'r1',
+            active: false,
+            $updatedAt: '2026-02-01T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+      const persistedValues = (
+        toggleReminderActive as ToggleActiveMock
+      ).mock.calls.map((c) => c[1]);
+      expect(persistedValues[0]).toBe(false);
+      expect(persistedValues[persistedValues.length - 1]).toBe(true);
+    });
+
+    it('toggle preserves pending edit fields and edit save preserves a pending toggle', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({
+          $id: 'r1',
+          description: 'Buy milk',
+          locationLabel: 'Home',
+          active: true,
+        }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      // Apply a local edit first (description change, still active).
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+      });
+      const edited = makeReminder({
+        $id: 'r1',
+        description: 'Buy oat milk',
+        locationLabel: 'Home',
+        active: true,
+        $updatedAt: '2026-01-02T00:00:00.000Z',
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(edited);
+        await Promise.resolve();
+      });
+
+      // Toggle must flip ONLY active, keeping the edited description.
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      const afterToggle = r.root.findByType(CardReminder).props.card;
+      expect(afterToggle.active).toBe(false);
+      expect(afterToggle.do).toBe('Buy oat milk');
+      await flush();
+
+      // Reverse direction: toggle pending, then an edit save lands — the
+      // toggled active value must survive the edit merge.
+      let resolveToggle!: (value: Reminder) => void;
+      (toggleReminderActive as ToggleActiveMock).mockReturnValueOnce(
+        new Promise<Reminder>((resolve) => {
+          resolveToggle = resolve;
+        })
+      );
+      act(() => {
+        r.root.findByType(CardReminder).props.onPressBell('r1');
+      });
+      // r1 is currently false (after the first toggle); this flips to true
+      // and holds the request open.
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
+
+      const concurrentEdit = makeReminder({
+        $id: 'r1',
+        description: 'Buy soy milk',
+        locationLabel: 'Home',
+        active: false,
+        $updatedAt: '2026-01-03T00:00:00.000Z',
+      });
+      await act(async () => {
+        // Simulate the edit modal saving while the toggle is in flight by
+        // reopening from the body target is not needed — call the merge path
+        // via a body-press + onUpdated round trip.
+        r.root.findByType(CardReminder).props.onPressBody('r1');
+        await Promise.resolve();
+      });
+      await act(async () => {
+        r.root.findByType(EditReminderModal).props.onUpdated(concurrentEdit);
+        await Promise.resolve();
+      });
+      // The pending toggle (true) wins over the stale edit snapshot (false),
+      // while the edit's description is kept.
+      const merged = r.root.findByType(CardReminder).props.card;
+      expect(merged.active).toBe(true);
+      expect(merged.do).toBe('Buy soy milk');
+
+      await act(async () => {
+        resolveToggle(
+          makeReminder({
+            $id: 'r1',
+            active: true,
+            description: 'Buy soy milk',
+            locationLabel: 'Home',
+            $updatedAt: '2026-02-01T00:00:00.000Z',
+          })
+        );
+        await Promise.resolve();
+      });
+      await flush();
+      const final = r.root.findByType(CardReminder).props.card;
+      expect(final.active).toBe(true);
+      expect(final.do).toBe('Buy soy milk');
+    });
+
+    it('is a no-op for an unknown id', async () => {
+      (listReminders as ListRemindersMock).mockResolvedValue([
+        makeReminder({ $id: 'r1', active: true }),
+      ]);
+      const r = renderAs(signedInUser());
+      await flush();
+
+      expect(() => {
+        r.root.findByType(CardReminder).props.onPressBell('missing');
+      }).not.toThrow();
+      expect(toggleReminderActive).not.toHaveBeenCalled();
+      expect(r.root.findByType(CardReminder).props.card.active).toBe(true);
     });
   });
 
@@ -517,17 +840,12 @@ describe('app/(tabs)/home', () => {
       expect(modals[0].props.reminder.locationLabel).toBe('Home');
     });
 
-    it('does NOT open the edit popup from the bell or trash targets', async () => {
+    it('does NOT open the edit popup from the trash target', async () => {
       (listReminders as ListRemindersMock).mockResolvedValue([
         makeReminder({ $id: 'r1' }),
       ]);
       const r = renderAs(signedInUser());
       await flush();
-
-      act(() => {
-        r.root.findByType(CardReminder).props.onPressBell('r1');
-      });
-      expect(r.root.findAllByType(EditReminderModal)).toHaveLength(0);
 
       act(() => {
         r.root.findByType(CardReminder).props.onPressTrash('r1');

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { images, icons } from '@/constants';
 import { FlatList, TouchableOpacity, Image } from 'react-native';
@@ -21,7 +21,7 @@ import ReminderLocationModal from '@/components/ReminderLocationModal';
 import EditReminderModal from '@/components/EditReminderModal';
 import { GreenLoading } from '@/components/Loading/Loading';
 import { useAppwrite } from '@/hooks/useAppwrite';
-import { listReminders } from '@/lib/reminders';
+import { listReminders, toggleReminderActive } from '@/lib/reminders';
 import type { Reminder } from '@/lib/appwrite.types';
 import { UserContext } from '@/store/user';
 import { isDescriptionValid } from '@/utils/validateReminder';
@@ -83,6 +83,7 @@ type HomeHeaderProps = {
   isValid: boolean;
   isLoading: boolean;
   error: string | null;
+  toggleError: string | null;
   containerStyle: AnimatedStyle<ViewStyle>;
   iconStyle: AnimatedStyle<ViewStyle>;
   AppLogo: React.ComponentType<{ width?: number; height?: number }>;
@@ -96,6 +97,7 @@ const HomeHeader = ({
   isValid,
   isLoading,
   error,
+  toggleError,
   containerStyle,
   iconStyle,
   AppLogo,
@@ -192,6 +194,16 @@ const HomeHeader = ({
         </TouchableOpacity>
       </View>
     )}
+    {toggleError && (
+      <View className="py-2 items-center">
+        <Text
+          testID="toggle-reminder-error"
+          className="text-red-300 text-center font-inmedium"
+        >
+          {toggleError}
+        </Text>
+      </View>
+    )}
   </View>
 );
 
@@ -213,6 +225,19 @@ const Home = observer(() => {
   const [reminderOverrides, setReminderOverrides] = useState<
     Record<string, Reminder>
   >({});
+  // Inline error for the bell toggle (ATO-15). Rendered under the heading via
+  // HomeHeader; cleared on the next toggle attempt.
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  // Per-id toggle chase state (ATO-15 rapid-tap safety). `toggleInFlight`
+  // serializes per-id writes (updateReminder is fetch-verify-then-mutate, so
+  // concurrent writes can interleave); `pendingToggle` records the latest
+  // requested `active` value while a request is in flight; `lastGoodActive`
+  // remembers the last known persisted value so a failure can revert ONLY the
+  // `active` field without dropping concurrent edit fields. Refs (not state)
+  // so the async loop always sees the latest tap without stale closures.
+  const toggleInFlightRef = useRef<Set<string>>(new Set());
+  const pendingToggleRef = useRef<Record<string, boolean | undefined>>({});
+  const lastGoodActiveRef = useRef<Record<string, boolean>>({});
   const user = useContext(UserContext);
   // Use the store's public typed accessors. Never reach into the private
   // `_session` field (or the raw Appwrite account object, which has no
@@ -330,8 +355,9 @@ const Home = observer(() => {
   };
 
   // Tap targets for the card. The body opens the edit popup (ATO-14); the bell
-  // and trash remain stubbed until their own stories land. The signature is
-  // ($id) to match the CardReminder prop contract.
+  // toggles `active` optimistically with a last-write-wins chase (ATO-15); the
+  // trash remains stubbed until its own story lands. Signatures are ($id) to
+  // match the CardReminder prop contract.
   const handlePressBody = (id: string): void => {
     const target = reminderList.find((item) => item.$id === id);
     // If the row is no longer in the fetched list there is nothing to pre-fill
@@ -343,15 +369,174 @@ const Home = observer(() => {
     // first edit on the server.
     setEditingReminder(reminderOverrides[id] ?? target);
   };
-  const handlePressBell = (_id: string): void => {
-    void _id;
+  // Serialize per-id toggle writes and chase the latest tap: while a request
+  // is in flight, newer taps only update `pendingToggleRef`; when the flight
+  // resolves, a mismatch fires one follow-up with the last requested value.
+  // This guarantees final persisted state == last tap without debouncing
+  // (which would drop taps or add latency).
+  const runToggleLoop = async (id: string): Promise<void> => {
+    if (toggleInFlightRef.current.has(id)) return;
+    toggleInFlightRef.current.add(id);
+    try {
+      for (;;) {
+        const target = pendingToggleRef.current[id];
+        if (target === undefined) break;
+        const attempted = target;
+        try {
+          const persisted = await toggleReminderActive(id, attempted);
+          lastGoodActiveRef.current[id] = persisted.active;
+          const latest = pendingToggleRef.current[id];
+          if (latest !== undefined && latest !== attempted) {
+            // A newer tap landed mid-flight: keep the local non-active fields
+            // (a concurrent edit may have changed them) and the newest
+            // requested `active`, then loop to persist it.
+            const newest = latest;
+            const persistedAt =
+              typeof persisted.$updatedAt === 'string'
+                ? persisted.$updatedAt
+                : '';
+            setReminderOverrides((prev) => {
+              const existing = prev[id];
+              if (!existing) {
+                return { ...prev, [id]: { ...persisted, active: newest } };
+              }
+              const existingAt =
+                typeof existing.$updatedAt === 'string'
+                  ? existing.$updatedAt
+                  : '';
+              return {
+                ...prev,
+                [id]: {
+                  ...existing,
+                  active: newest,
+                  $updatedAt:
+                    persistedAt >= existingAt ? persistedAt : existingAt,
+                },
+              };
+            });
+            continue;
+          }
+          // Settled with no newer tap: take the server's `active` + timestamp
+          // but keep local non-active fields (a concurrent edit save may have
+          // landed mid-flight with newer description/location).
+          const persistedAt =
+            typeof persisted.$updatedAt === 'string'
+              ? persisted.$updatedAt
+              : '';
+          setReminderOverrides((prev) => {
+            const existing = prev[id];
+            if (!existing) return { ...prev, [id]: persisted };
+            const existingAt =
+              typeof existing.$updatedAt === 'string'
+                ? existing.$updatedAt
+                : '';
+            return {
+              ...prev,
+              [id]: {
+                ...existing,
+                active: persisted.active,
+                $updatedAt: persistedAt >= existingAt ? persistedAt : existingAt,
+              },
+            };
+          });
+          if (pendingToggleRef.current[id] === attempted) {
+            delete pendingToggleRef.current[id];
+          }
+          break;
+        } catch (err) {
+          // Revert ONLY `active` to the last known persisted value so pending
+          // edit fields survive; surface the failure inline (same pass-through
+          // convention as EditReminderModal: actionable
+          // `Cannot update reminder:` messages verbatim, generic otherwise).
+          const good = lastGoodActiveRef.current[id];
+          setReminderOverrides((prev) => {
+            const existing = prev[id];
+            if (existing === undefined || good === undefined) return prev;
+            return { ...prev, [id]: { ...existing, active: good } };
+          });
+          const message = err instanceof Error ? err.message : String(err);
+          setToggleError(
+            message.startsWith('Cannot update reminder:')
+              ? message
+              : 'Failed to update reminder. Please try again.'
+          );
+          delete pendingToggleRef.current[id];
+          break;
+        }
+      }
+    } finally {
+      toggleInFlightRef.current.delete(id);
+      if (pendingToggleRef.current[id] === undefined) {
+        delete lastGoodActiveRef.current[id];
+      }
+    }
+  };
+  const handlePressBell = (id: string): void => {
+    // No confirmation popup (unlike delete): flip immediately.
+    const base = reminderOverrides[id] ?? reminderList.find((item) => item.$id === id);
+    if (!base) return;
+    // Flip relative to the latest requested value when a request is already
+    // in flight, so same-tick rapid taps still alternate instead of writing
+    // the same value twice.
+    const pending = pendingToggleRef.current[id];
+    const desired = !(pending !== undefined ? pending : base.active);
+    if (!toggleInFlightRef.current.has(id)) {
+      lastGoodActiveRef.current[id] = base.active;
+    }
+    pendingToggleRef.current[id] = desired;
+    // Optimistic merge writes ONLY `active` (plus a synthetic newer
+    // `$updatedAt` so a refetch that started before the toggle cannot drop
+    // the just-applied flip as stale). All other fields come from the pending
+    // edit override when present, so toggle and edit compose both ways.
+    const nowIso = new Date().toISOString();
+    setReminderOverrides((prev) => {
+      const b = prev[id] ?? base;
+      const prevAt = typeof b.$updatedAt === 'string' ? b.$updatedAt : '';
+      return {
+        ...prev,
+        [id]: {
+          ...b,
+          active: desired,
+          $updatedAt: nowIso >= prevAt ? nowIso : prevAt,
+        },
+      };
+    });
+    setToggleError(null);
+    void runToggleLoop(id).catch(() => {
+      // runToggleLoop handles its own errors inline; this guards against an
+      // unexpected rejection escaping as an unhandled promise.
+    });
   };
   const handlePressTrash = (_id: string): void => {
     void _id;
   };
 
   const handleReminderUpdated = (updated: Reminder): void => {
-    setReminderOverrides((prev) => ({ ...prev, [updated.$id]: updated }));
+    // An edit save must not clobber a pending toggle: when a toggle is in
+    // flight for this id, the last requested `active` wins over the stale
+    // snapshot the edit popup was prefilled from, while the edit's
+    // non-active fields are kept.
+    setReminderOverrides((prev) => {
+      const pending = pendingToggleRef.current[updated.$id];
+      if (pending === undefined) {
+        return { ...prev, [updated.$id]: updated };
+      }
+      const existing = prev[updated.$id];
+      const updatedAt =
+        typeof updated.$updatedAt === 'string' ? updated.$updatedAt : '';
+      const existingAt =
+        existing && typeof existing.$updatedAt === 'string'
+          ? existing.$updatedAt
+          : '';
+      return {
+        ...prev,
+        [updated.$id]: {
+          ...updated,
+          active: pending,
+          $updatedAt: existingAt > updatedAt ? existingAt : updatedAt,
+        },
+      };
+    });
     setEditingReminder(null);
   };
 
@@ -381,6 +566,7 @@ const Home = observer(() => {
             isValid={isValid}
             isLoading={isLoading}
             error={error}
+            toggleError={toggleError}
             containerStyle={containerStyle}
             iconStyle={iconStyle}
             AppLogo={AppLogo}
