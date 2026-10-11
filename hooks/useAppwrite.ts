@@ -42,7 +42,9 @@ export const useAppwrite = <T, Args extends unknown[] = []>(
       return result;
     } catch (error: unknown) {
       const err = ensureError(error);
-      console.error(err.message);
+      if (__DEV__) {
+        console.error(err.message);
+      }
       setError(err.message);
       throw err;
     } finally {

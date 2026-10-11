@@ -94,15 +94,15 @@ describe('createReminder', () => {
     await createReminder(validInput);
 
     expect(Role.user).toHaveBeenCalledWith('user-123');
-    expect(Permission.read).toHaveBeenCalledWith('role:user:user-123');
-    expect(Permission.update).toHaveBeenCalledWith('role:user:user-123');
-    expect(Permission.delete).toHaveBeenCalledWith('role:user:user-123');
+    expect(Permission.read).toHaveBeenCalledWith('user:user-123');
+    expect(Permission.update).toHaveBeenCalledWith('user:user-123');
+    expect(Permission.delete).toHaveBeenCalledWith('user:user-123');
 
     const permissions = databaseInstance.createDocument.mock.calls[0][4];
     expect(permissions).toEqual([
-      { operation: 'read', role: 'role:user:user-123' },
-      { operation: 'update', role: 'role:user:user-123' },
-      { operation: 'delete', role: 'role:user:user-123' },
+      'read("user:user-123")',
+      'update("user:user-123")',
+      'delete("user:user-123")',
     ]);
   });
 
@@ -245,9 +245,9 @@ describe('createReminder session-derived ownership (ATO-12 permissions fix)', ()
     expect(data.userId).toBe(SESSION_ID);
     const permissions = databaseInstance.createDocument.mock.calls[0][4];
     expect(permissions).toEqual([
-      { operation: 'read', role: `role:user:${SESSION_ID}` },
-      { operation: 'update', role: `role:user:${SESSION_ID}` },
-      { operation: 'delete', role: `role:user:${SESSION_ID}` },
+      `read("user:${SESSION_ID}")`,
+      `update("user:${SESSION_ID}")`,
+      `delete("user:${SESSION_ID}")`,
     ]);
     expect(Role.user).toHaveBeenCalledWith(SESSION_ID);
     expect(result).toBe(mockReminder);

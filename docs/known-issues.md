@@ -20,7 +20,7 @@ replace the single `get` usage with a small local helper, to clear the known
 CVEs. The regression guard at `lib/__tests__/getCurrentUser.test.ts` protects
 behavioral equivalence if the implementation is later swapped.
 
-## Repurposed reminders collection — legacy video-post helpers are dead (ATO-11)
+## Repurposed reminders collection — legacy video-post helpers removed (ATO-11)
 
 The Appwrite collection `reminders` (`67590d690032f7fc76f6` in database
 `67590cf000382b570c08`, env `EXPO_PUBLIC_REMINDER_COLLECTION_ID`) was
@@ -30,22 +30,18 @@ repurposed for location reminders. Its current attributes are `userId`,
 There is no `appwrite.json` in the repo; the schema lives in Appwrite Cloud
 and this repo's only record is that doc (bus-factor risk if it drifts).
 
-Legacy helpers in `lib/appwrite.ts` still target the same collection id via
-`config.reminderCollectionId` but query attributes that **no longer exist**:
+Legacy helpers in `lib/appwrite.ts` (`getAllPosts`, `getLatestPosts`,
+`getBookmarkedPosts`, `searchPosts`, `getUserPosts`, `bookmarkVideo`)
+targeted the same collection id via `config.reminderCollectionId` but
+queried attributes that **no longer existed** (`title`, `creator`,
+`bookmarkedByUserId`, video/thumbnail fields) with no ownership filter.
 
-- `getAllPosts` / `getLatestPosts` — list without/with `orderDesc('$createdAt')` on the reminders collection (no longer a posts collection).
-- `getBookmarkedPosts(userId)` — `Query.contains('bookmarkedByUserId', userId)`.
-- `searchPosts(query)` — `Query.search('title', query)`.
-- `getUserPosts(userId)` — `Query.equal('creator', userId)`.
-- `bookmarkVideo(videoId, userId, bookmarkData, isBookmarked)` — `updateDocument(..., { bookmarkedByUserId: ... })`.
-
-All six are **dead/broken** against the current schema and must not be used.
-All access to the `reminders` collection must go through `lib/reminders.ts`
-(see `docs/reminders-data-layer.md` for the enforced DAL contract).
-
-**Follow-up (debt):** Remove or rewrite the six helpers and their types in
-`lib/appwrite.types.ts` (`VideoPost`, `GetAllPostsFunction`, etc.) once no
-callers remain. Tracked as follow-up to ATO-11.
+**Resolved:** all six were deleted from `lib/appwrite.ts` along with their
+suites in `lib/__tests__/appwrite.api.test.ts` (verified no callers before
+removal). All access to the `reminders` collection goes through
+`lib/reminders.ts` (see `docs/reminders-data-layer.md` for the enforced DAL
+contract). Both the helpers and their type exports (`VideoPost`,
+`GetAllPostsFunction`, etc.) were removed in the latest commit.
 
 ## expo-doctor (resolved)
 

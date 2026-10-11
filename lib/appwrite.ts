@@ -25,18 +25,8 @@ import type {
   CreateUserFunction,
   SignInFunction,
   GetCurrentUserFunction,
-  GetAllPostsFunction,
-  GetLatestPostsFunction,
-  GetBookmarkedPostsFunction,
-  SearchPostsFunction,
-  GetUserPostsFunction,
   SignOutFunction,
   GetFilePreviewFunction,
-  // UploadFileFunction,
-  // CreateVideoFunction,
-  BookmarkVideoFunction,
-  // FileAsset,
-  // VideoPost,
   CreateReminderFunction,
   CreateReminderInput,
   Reminder,
@@ -129,7 +119,9 @@ export const createUser: CreateUserFunction = async (
     return newUser;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -237,7 +229,9 @@ export const createReminder: CreateReminderFunction = async (input) => {
     return newReminder;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -294,7 +288,9 @@ export const signIn: SignInFunction = async (email, password) => {
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -324,87 +320,9 @@ export const getCurrentUser: GetCurrentUserFunction = async () => {
     if (isUnauthenticatedError(err)) {
       return null;
     }
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-export const getAllPosts: GetAllPostsFunction = async () => {
-  try {
-    const posts = await database.listDocuments(
-      config.databaseId,
-      config.reminderCollectionId,
-      []
-    );
-    return posts.documents;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-export const getLatestPosts: GetLatestPostsFunction = async () => {
-  try {
-    const posts = await database.listDocuments(
-      config.databaseId,
-      config.reminderCollectionId,
-      [Query.orderDesc('$createdAt')]
-    );
-    return posts.documents;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-export const getBookmarkedPosts: GetBookmarkedPostsFunction = async (
-  userId
-) => {
-  try {
-    const posts = await database.listDocuments(
-      config.databaseId,
-      config.reminderCollectionId,
-      [
-        Query.contains('bookmarkedByUserId', userId),
-        Query.orderDesc('$createdAt'),
-      ]
-    );
-    return posts.documents;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-export const searchPosts: SearchPostsFunction = async (query) => {
-  try {
-    const posts = await database.listDocuments(
-      config.databaseId,
-      config.reminderCollectionId,
-      [Query.search('title', query)]
-    );
-    return posts.documents;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-export const getUserPosts: GetUserPostsFunction = async (userId) => {
-  try {
-    const posts = await database.listDocuments(
-      config.databaseId,
-      config.reminderCollectionId,
-      [Query.equal('creator', userId), Query.orderDesc('$createdAt')]
-    );
-    return posts.documents;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -415,7 +333,9 @@ export const signOut: SignOutFunction = async () => {
     return session;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };
@@ -441,44 +361,9 @@ export const getFilePreview: GetFilePreviewFunction = async (fileId, type) => {
     return fileUrl;
   } catch (error: unknown) {
     const err = ensureError(error);
-    console.error(err.message);
-    throw new Error(err.message);
-  }
-};
-
-/**
- *
- * @param {string} videoId
- * @param {string} userId
- * @param {userId[]} bookmarkData
- * @returns Models.Document
- */
-export const bookmarkVideo: BookmarkVideoFunction = async (
-  videoId,
-  userId,
-  bookmarkData,
-  isBookmarked
-) => {
-  // console.log(
-  //   "bookmarkVideo",
-  //   bookmarkData.filter((bookmark) => bookmark.$id !== userId)
-  // );
-
-  try {
-    const updatedData = await database.updateDocument(
-      config.databaseId,
-      config.reminderCollectionId,
-      videoId,
-      {
-        bookmarkedByUserId: isBookmarked
-          ? bookmarkData.filter((bookmarkUserId) => bookmarkUserId !== userId)
-          : [...bookmarkData, userId],
-      }
-    );
-    return updatedData;
-  } catch (error: unknown) {
-    const err = ensureError(error);
-    console.error(err.message);
+    if (__DEV__) {
+      console.error(err.message);
+    }
     throw new Error(err.message);
   }
 };

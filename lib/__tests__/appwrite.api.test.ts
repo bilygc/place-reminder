@@ -4,14 +4,9 @@
  * appwrite.smoke.test.ts (config validation + live ping + input validation).
  *
  * Covers:
- *  - getAllPosts / getLatestPosts / getUserPosts / searchPosts /
- *    getBookmarkedPosts: database.listDocuments call args (databaseId,
- *    collectionId, Query builders), .documents return, empty-result,
- *    error propagation (console.error + rethrow).
  *  - signOut: success resolves; account.deleteSession rejects -> rethrow.
  *  - getFilePreview: video / image / unsupported-type branches; falsy-result
  *    guard; error propagation.
- *  - bookmarkVideo: add (append) and remove (filter) branches; error path.
  *  - createUser: happy path (account.create -> signIn -> createDocument);
  *    account.create rejects -> wrapped rethrow; account.create resolves
  *    falsy -> throw.
@@ -20,6 +15,10 @@
  *    succeeds but database.listDocuments rejects.
  *  - requireEnv(): missing / whitespace-only env var throws at import time
  *    mentioning the var name (via jest.isolateModules).
+ *
+ * (Legacy unscoped helpers getAllPosts / getLatestPosts / getUserPosts /
+ * searchPosts / getBookmarkedPosts / bookmarkVideo were removed with their
+ * tests — they queried the reminders collection with no ownership filter.)
  *
  * The react-native-appwrite SDK is fully mocked via the shared manual mock
  * at `__mocks__/react-native-appwrite.js` (no real network, no real
@@ -53,14 +52,8 @@ const ImageGravity = appwriteModule.ImageGravity;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const {
   config,
-  getAllPosts,
-  getLatestPosts,
-  getUserPosts,
-  searchPosts,
-  getBookmarkedPosts,
   signOut,
   getFilePreview,
-  bookmarkVideo,
   createUser,
   signIn,
   getCurrentUser,
@@ -83,8 +76,6 @@ const drivenMocks = [
   avatarsInstance.getInitials,
   Query.equal,
   Query.orderDesc,
-  Query.contains,
-  Query.search,
   ID.unique,
 ];
 
@@ -98,8 +89,6 @@ describe('appwrite.api', () => {
     // array passed to listDocuments can be asserted precisely.
     Query.orderDesc.mockReturnValue('Q:orderDesc');
     Query.equal.mockReturnValue('Q:equal');
-    Query.contains.mockReturnValue('Q:contains');
-    Query.search.mockReturnValue('Q:search');
     ID.unique.mockReturnValue('gen-id');
     // Default: no active Appwrite session, so signIn's session probe
     // does not treat the client as already authenticated.
@@ -114,194 +103,6 @@ describe('appwrite.api', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
-  });
-
-  // ---------------------------------------------------------------------------
-  // getAllPosts
-  // ---------------------------------------------------------------------------
-  describe('getAllPosts', () => {
-    it('calls listDocuments with databaseId, reminderCollectionId, empty queries and returns .documents', async () => {
-      const docs = [{ $id: 'r1' }, { $id: 'r2' }];
-      databaseInstance.listDocuments.mockResolvedValue({ documents: docs });
-
-      const result = await getAllPosts();
-
-      expect(databaseInstance.listDocuments).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        []
-      );
-      expect(result).toBe(docs);
-    });
-
-    it('returns an empty array when the query yields no documents', async () => {
-      databaseInstance.listDocuments.mockResolvedValue({ documents: [] });
-
-      const result = await getAllPosts();
-
-      expect(result).toEqual([]);
-    });
-
-    it('rethrows a wrapped error when listDocuments rejects', async () => {
-      databaseInstance.listDocuments.mockRejectedValue(
-        new Error('db unavailable')
-      );
-
-      await expect(getAllPosts()).rejects.toThrow('db unavailable');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // getLatestPosts
-  // ---------------------------------------------------------------------------
-  describe('getLatestPosts', () => {
-    it('calls listDocuments with orderDesc($createdAt) and returns .documents', async () => {
-      const docs = [{ $id: 'r1' }];
-      databaseInstance.listDocuments.mockResolvedValue({ documents: docs });
-
-      const result = await getLatestPosts();
-
-      expect(Query.orderDesc).toHaveBeenCalledWith('$createdAt');
-      expect(databaseInstance.listDocuments).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        ['Q:orderDesc']
-      );
-      expect(result).toBe(docs);
-    });
-
-    it('returns an empty array when the query yields no documents', async () => {
-      databaseInstance.listDocuments.mockResolvedValue({ documents: [] });
-
-      const result = await getLatestPosts();
-
-      expect(result).toEqual([]);
-    });
-
-    it('rethrows a wrapped error when listDocuments rejects', async () => {
-      databaseInstance.listDocuments.mockRejectedValue(
-        new Error('db unavailable')
-      );
-
-      await expect(getLatestPosts()).rejects.toThrow('db unavailable');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // getUserPosts
-  // ---------------------------------------------------------------------------
-  describe('getUserPosts', () => {
-    it('calls listDocuments with equal(creator, userId) + orderDesc($createdAt) and returns .documents', async () => {
-      const docs = [{ $id: 'r1' }];
-      databaseInstance.listDocuments.mockResolvedValue({ documents: docs });
-
-      const result = await getUserPosts('user-1');
-
-      expect(Query.equal).toHaveBeenCalledWith('creator', 'user-1');
-      expect(Query.orderDesc).toHaveBeenCalledWith('$createdAt');
-      expect(databaseInstance.listDocuments).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        ['Q:equal', 'Q:orderDesc']
-      );
-      expect(result).toBe(docs);
-    });
-
-    it('returns an empty array when the query yields no documents', async () => {
-      databaseInstance.listDocuments.mockResolvedValue({ documents: [] });
-
-      const result = await getUserPosts('user-1');
-
-      expect(result).toEqual([]);
-    });
-
-    it('rethrows a wrapped error when listDocuments rejects', async () => {
-      databaseInstance.listDocuments.mockRejectedValue(
-        new Error('db unavailable')
-      );
-
-      await expect(getUserPosts('user-1')).rejects.toThrow('db unavailable');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // searchPosts
-  // ---------------------------------------------------------------------------
-  describe('searchPosts', () => {
-    it('calls listDocuments with search(title, query) and returns .documents', async () => {
-      const docs = [{ $id: 'r1' }];
-      databaseInstance.listDocuments.mockResolvedValue({ documents: docs });
-
-      const result = await searchPosts('reminder');
-
-      expect(Query.search).toHaveBeenCalledWith('title', 'reminder');
-      expect(databaseInstance.listDocuments).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        ['Q:search']
-      );
-      expect(result).toBe(docs);
-    });
-
-    it('returns an empty array when the query yields no documents', async () => {
-      databaseInstance.listDocuments.mockResolvedValue({ documents: [] });
-
-      const result = await searchPosts('nothing');
-
-      expect(result).toEqual([]);
-    });
-
-    it('rethrows a wrapped error when listDocuments rejects', async () => {
-      databaseInstance.listDocuments.mockRejectedValue(
-        new Error('db unavailable')
-      );
-
-      await expect(searchPosts('reminder')).rejects.toThrow('db unavailable');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // getBookmarkedPosts
-  // ---------------------------------------------------------------------------
-  describe('getBookmarkedPosts', () => {
-    it('calls listDocuments with contains(bookmarkedByUserId, userId) + orderDesc($createdAt) and returns .documents', async () => {
-      const docs = [{ $id: 'r1' }];
-      databaseInstance.listDocuments.mockResolvedValue({ documents: docs });
-
-      const result = await getBookmarkedPosts('user-1');
-
-      expect(Query.contains).toHaveBeenCalledWith('bookmarkedByUserId', 'user-1');
-      expect(Query.orderDesc).toHaveBeenCalledWith('$createdAt');
-      expect(databaseInstance.listDocuments).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        ['Q:contains', 'Q:orderDesc']
-      );
-      expect(result).toBe(docs);
-    });
-
-    it('returns an empty array when the query yields no documents', async () => {
-      databaseInstance.listDocuments.mockResolvedValue({ documents: [] });
-
-      const result = await getBookmarkedPosts('user-1');
-
-      expect(result).toEqual([]);
-    });
-
-    it('rethrows a wrapped error when listDocuments rejects', async () => {
-      databaseInstance.listDocuments.mockRejectedValue(
-        new Error('db unavailable')
-      );
-
-      await expect(getBookmarkedPosts('user-1')).rejects.toThrow(
-        'db unavailable'
-      );
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -324,6 +125,23 @@ describe('appwrite.api', () => {
 
       await expect(signOut()).rejects.toThrow('no active session');
       expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+
+    it('does not log raw SDK detail in production but still throws the same error', async () => {
+      const originalDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      try {
+        accountInstance.deleteSession.mockRejectedValue(
+          new Error('no active session for account-123')
+        );
+
+        await expect(signOut()).rejects.toThrow(
+          'no active session for account-123'
+        );
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } finally {
+        (globalThis as { __DEV__?: boolean }).__DEV__ = originalDev;
+      }
     });
   });
 
@@ -386,57 +204,6 @@ describe('appwrite.api', () => {
       await expect(getFilePreview('file-1', 'image')).rejects.toThrow(
         'File preview generation failed: no URL returned'
       );
-      expect(consoleErrorSpy).toHaveBeenCalled();
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // bookmarkVideo
-  // ---------------------------------------------------------------------------
-  describe('bookmarkVideo', () => {
-    it('appends userId when isBookmarked is false (not yet bookmarked)', async () => {
-      const updated = { $id: 'video-1', bookmarkedByUserId: ['user-a', 'user-b'] };
-      databaseInstance.updateDocument.mockResolvedValue(updated);
-
-      const result = await bookmarkVideo('video-1', 'user-b', ['user-a'], false);
-
-      expect(databaseInstance.updateDocument).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        'video-1',
-        { bookmarkedByUserId: ['user-a', 'user-b'] }
-      );
-      expect(result).toBe(updated);
-    });
-
-    it('removes userId when isBookmarked is true (already bookmarked)', async () => {
-      const updated = { $id: 'video-1', bookmarkedByUserId: ['user-a'] };
-      databaseInstance.updateDocument.mockResolvedValue(updated);
-
-      const result = await bookmarkVideo(
-        'video-1',
-        'user-b',
-        ['user-a', 'user-b'],
-        true
-      );
-
-      expect(databaseInstance.updateDocument).toHaveBeenCalledWith(
-        config.databaseId,
-        config.reminderCollectionId,
-        'video-1',
-        { bookmarkedByUserId: ['user-a'] }
-      );
-      expect(result).toBe(updated);
-    });
-
-    it('rethrows a wrapped error when updateDocument rejects', async () => {
-      databaseInstance.updateDocument.mockRejectedValue(
-        new Error('update failed')
-      );
-
-      await expect(
-        bookmarkVideo('video-1', 'user-b', [], false)
-      ).rejects.toThrow('update failed');
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
   });
