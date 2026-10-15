@@ -41,6 +41,7 @@ jest.mock('@/lib/locationService', () => {
       onLocationUpdate: jest.fn(),
     },
     getCurrentLocationWithLabel: jest.fn(),
+    getLabelForCoordinates: jest.fn(async () => null),
     LocationPermissionDeniedError,
     LocationUnavailableError,
   };
@@ -52,6 +53,8 @@ const { updateReminder } = require('@/lib/reminders');
 const LocationService = require('@/lib/locationService').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { getCurrentLocationWithLabel } = require('@/lib/locationService');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { getLabelForCoordinates } = require('@/lib/locationService');
 
 function makeReminder(overrides: Partial<Reminder> = {}): Reminder {
   return {
@@ -133,6 +136,7 @@ describe('EditReminderModal', () => {
     jest.clearAllMocks();
     LocationService.getState.mockReturnValue({ location: null });
     LocationService.onLocationUpdate.mockReturnValue(jest.fn());
+    getLabelForCoordinates.mockResolvedValue(null);
   });
 
   describe('pre-fill', () => {
@@ -419,6 +423,204 @@ describe('EditReminderModal', () => {
 
       expect(visibleTexts(renderer)).toContain(
         'Location permission denied. Please grant location permission in Settings and try again.'
+      );
+    });
+
+    it('reverse-geocodes a map pin and saves the label', async () => {
+      getLabelForCoordinates.mockResolvedValue('Fancy Mall');
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal({
+        reminder: makeReminder({ locationLabel: 'Home', locationSource: 'current' }),
+      });
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root
+          .findByType(MapPicker)
+          .props.onConfirm({ latitude: 10, longitude: 20 });
+        await Promise.resolve();
+      });
+
+      expect(getLabelForCoordinates).toHaveBeenCalledWith({
+        latitude: 10,
+        longitude: 20,
+      });
+      expect(visibleTexts(renderer)).toContain('Fancy Mall');
+
+      await pressButtonAsync(renderer, 'Save');
+      expect(updateReminder).toHaveBeenCalledWith(
+        'r1',
+        expect.objectContaining({
+          latitude: 10,
+          longitude: 20,
+          locationSource: 'map',
+          locationLabel: 'Fancy Mall',
+        })
+      );
+    });
+
+    it('sends an empty label when map-pin geocoding rejects (no crash, stale label cleared)', async () => {
+      getLabelForCoordinates.mockRejectedValue(new Error('sdk down'));
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal({
+        reminder: makeReminder({ locationLabel: 'Home', locationSource: 'current' }),
+      });
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root
+          .findByType(MapPicker)
+          .props.onConfirm({ latitude: 10, longitude: 20 });
+        await Promise.resolve();
+      });
+
+      // Failure leaves label null: coords fallback in the preview.
+      expect(visibleTexts(renderer)).toContain('10.0000, 20.0000');
+
+      await pressButtonAsync(renderer, 'Save');
+      expect(updateReminder).toHaveBeenCalledWith(
+        'r1',
+        expect.objectContaining({
+          latitude: 10,
+          longitude: 20,
+          locationSource: 'map',
+          locationLabel: '',
+        })
+      );
+    });
+  });
+
+  describe('POI-tap selection', () => {
+    it('saves the POI name directly and skips reverse-geocoding', async () => {
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal({
+        reminder: makeReminder({ locationLabel: 'Home', locationSource: 'current' }),
+      });
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root.findByType(MapPicker).props.onConfirm({
+          latitude: 1,
+          longitude: 2,
+          label: 'Test Mall',
+          placeId: 'p1',
+          source: 'poi',
+        });
+        await Promise.resolve();
+      });
+
+      expect(getLabelForCoordinates).not.toHaveBeenCalled();
+      expect(visibleTexts(renderer)).toContain('Test Mall');
+
+      await pressButtonAsync(renderer, 'Save');
+      expect(updateReminder).toHaveBeenCalledWith(
+        'r1',
+        expect.objectContaining({
+          latitude: 1,
+          longitude: 2,
+          locationSource: 'map',
+          locationLabel: 'Test Mall',
+        })
+      );
+      // placeId is transient: never part of the update patch.
+      expect(
+        (updateReminder as jest.Mock).mock.calls[0][1]
+      ).not.toHaveProperty('placeId');
+    });
+
+    it('clamps an over-long POI name to 255 characters', async () => {
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal();
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root.findByType(MapPicker).props.onConfirm({
+          latitude: 1,
+          longitude: 2,
+          label: 'M'.repeat(300),
+          placeId: 'p1',
+          source: 'poi',
+        });
+        await Promise.resolve();
+      });
+
+      await pressButtonAsync(renderer, 'Save');
+      const patch = (updateReminder as jest.Mock).mock.calls[0][1];
+      expect(patch.locationLabel).toHaveLength(255);
+    });
+
+    it('falls back to reverse-geocoding when the POI name is empty', async () => {
+      getLabelForCoordinates.mockResolvedValue('Geocoded Place');
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal();
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root.findByType(MapPicker).props.onConfirm({
+          latitude: 1,
+          longitude: 2,
+          label: '',
+          placeId: 'p1',
+          source: 'poi',
+        });
+        await Promise.resolve();
+      });
+
+      expect(getLabelForCoordinates).toHaveBeenCalledWith({
+        latitude: 1,
+        longitude: 2,
+      });
+      expect(visibleTexts(renderer)).toContain('Geocoded Place');
+    });
+
+    it('re-geocodes after a drag following a POI pick (stale label cleared)', async () => {
+      getLabelForCoordinates.mockResolvedValue(null);
+      (updateReminder as jest.Mock).mockResolvedValue(makeReminder());
+      const { renderer } = renderModal({
+        reminder: makeReminder({ locationLabel: 'Home', locationSource: 'current' }),
+      });
+
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root.findByType(MapPicker).props.onConfirm({
+          latitude: 1,
+          longitude: 2,
+          label: 'Test Mall',
+          placeId: 'p1',
+          source: 'poi',
+        });
+        await Promise.resolve();
+      });
+      expect(visibleTexts(renderer)).toContain('Test Mall');
+
+      // A later drag clears the POI identity; the geocode path runs again and
+      // the save clears the stale label with ''.
+      pressButton(renderer, 'Select on map');
+      await act(async () => {
+        renderer.root.findByType(MapPicker).props.onConfirm({
+          latitude: 3,
+          longitude: 4,
+          label: null,
+          placeId: null,
+          source: 'drag',
+        });
+        await Promise.resolve();
+      });
+
+      expect(getLabelForCoordinates).toHaveBeenCalledWith({
+        latitude: 3,
+        longitude: 4,
+      });
+
+      await pressButtonAsync(renderer, 'Save');
+      expect(updateReminder).toHaveBeenCalledWith(
+        'r1',
+        expect.objectContaining({
+          latitude: 3,
+          longitude: 4,
+          locationSource: 'map',
+          locationLabel: '',
+        })
       );
     });
   });

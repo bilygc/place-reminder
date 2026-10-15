@@ -42,15 +42,23 @@ const CardReminder: React.FC<CardProps> = ({
         accessibilityLabel={`Reminder at ${at}: ${description}. Active ${
           active ? 'ON' : 'OFF'
         }`}
-        className="self-stretch justify-around min-w-[184px]"
+        className="flex-1 min-w-0 self-stretch justify-around"
       >
         <View>
-          <Text className="text-gray-50">
+          <Text
+            className="text-gray-50"
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             <Text className="text-primary">At</Text> {at}
           </Text>
         </View>
         <View>
-          <Text className="text-gray-50">
+          <Text
+            className="text-gray-50"
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             <Text className="text-primary">Do</Text> {description}
           </Text>
         </View>
@@ -62,7 +70,7 @@ const CardReminder: React.FC<CardProps> = ({
         </View>
       </Pressable>
       {/* Right column — two separate, non-overlapping tap targets. */}
-      <View>
+      <View className="shrink-0">
         <Pressable
           testID={`card-bell-${$id}`}
           onPress={() => onPressBell?.($id)}

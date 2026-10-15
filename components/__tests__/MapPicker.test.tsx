@@ -96,7 +96,13 @@ describe('MapPicker', () => {
       confirmButton.props.handlePress();
     });
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm).toHaveBeenCalledWith({ latitude: 1, longitude: 2 });
+    expect(onConfirm).toHaveBeenCalledWith({
+      latitude: 1,
+      longitude: 2,
+      label: null,
+      placeId: null,
+      source: 'tap',
+    });
   });
 
   it('does not confirm when no pin has been dropped', () => {
@@ -146,5 +152,143 @@ describe('MapPicker', () => {
       children: 'Please use the iOS or Android app to select a location on the map.',
     });
     expect(fallbackSubtext).toBeTruthy();
+  });
+
+  describe('POI tap selection', () => {
+    const poiEvent = {
+      nativeEvent: {
+        placeId: 'p1',
+        name: 'Test Mall',
+        coordinate: { latitude: 1, longitude: 2 },
+      },
+    };
+
+    function confirm(r: TestRenderer.ReactTestRenderer) {
+      const confirmButton = r.root.findByProps({ title: 'Confirm' });
+      act(() => {
+        confirmButton.props.handlePress();
+      });
+    }
+
+    it('selects the POI place via onPoiClick and confirms label/source/placeId', () => {
+      const onConfirm = jest.fn();
+      const r = render({ onConfirm, onCancel: jest.fn() });
+      const map = r.root.findByProps({ testID: 'mock-map-view' });
+
+      expect(map.props.onPoiClick).toBeInstanceOf(Function);
+
+      act(() => {
+        map.props.onPoiClick(poiEvent);
+      });
+
+      // The pin marker sits on the POI coordinate.
+      const marker = r.root.findByType(Marker);
+      expect(marker.props.coordinate).toEqual({ latitude: 1, longitude: 2 });
+
+      confirm(r);
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(onConfirm).toHaveBeenCalledWith({
+        latitude: 1,
+        longitude: 2,
+        label: 'Test Mall',
+        placeId: 'p1',
+        source: 'poi',
+      });
+    });
+
+    it('ignores the trailing onPress double-fire right after a POI click (Android)', () => {
+      const onConfirm = jest.fn();
+      const r = render({ onConfirm, onCancel: jest.fn() });
+      const map = r.root.findByProps({ testID: 'mock-map-view' });
+
+      act(() => {
+        map.props.onPoiClick(poiEvent);
+      });
+      // The Android backend fires onPress for the same touch immediately after
+      // onPoiClick — it must not override the POI pick.
+      act(() => {
+        map.props.onPress({
+          nativeEvent: { coordinate: { latitude: 9, longitude: 9 } },
+        });
+      });
+
+      const marker = r.root.findByType(Marker);
+      expect(marker.props.coordinate).toEqual({ latitude: 1, longitude: 2 });
+
+      confirm(r);
+      expect(onConfirm).toHaveBeenCalledWith({
+        latitude: 1,
+        longitude: 2,
+        label: 'Test Mall',
+        placeId: 'p1',
+        source: 'poi',
+      });
+    });
+
+    it('clears the POI label when a raw tap arrives after the guard window', () => {
+      const nowSpy = jest.spyOn(Date, 'now');
+      try {
+        let now = 1_000_000;
+        nowSpy.mockImplementation(() => now);
+        const onConfirm = jest.fn();
+        const r = render({ onConfirm, onCancel: jest.fn() });
+        const map = r.root.findByProps({ testID: 'mock-map-view' });
+
+        act(() => {
+          map.props.onPoiClick(poiEvent);
+        });
+        // A genuine later tap, beyond the double-fire window.
+        now += 1000;
+        act(() => {
+          map.props.onPress({
+            nativeEvent: { coordinate: { latitude: 3, longitude: 4 } },
+          });
+        });
+
+        confirm(r);
+        expect(onConfirm).toHaveBeenCalledWith({
+          latitude: 3,
+          longitude: 4,
+          label: null,
+          placeId: null,
+          source: 'tap',
+        });
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
+    it('clears the POI label/placeId when the pin is dragged', () => {
+      const onConfirm = jest.fn();
+      const r = render({ onConfirm, onCancel: jest.fn() });
+      const map = r.root.findByProps({ testID: 'mock-map-view' });
+
+      // Jump past the double-fire window so the drag setup isn't affected.
+      const nowSpy = jest.spyOn(Date, 'now');
+      try {
+        let now = 2_000_000;
+        nowSpy.mockImplementation(() => now);
+        act(() => {
+          map.props.onPoiClick(poiEvent);
+        });
+        now += 1000;
+        act(() => {
+          r.root.findByType(Marker).props.onDragEnd({
+            nativeEvent: { coordinate: { latitude: 5, longitude: 6 } },
+          });
+        });
+      } finally {
+        nowSpy.mockRestore();
+      }
+
+      confirm(r);
+      expect(onConfirm).toHaveBeenCalledWith({
+        latitude: 5,
+        longitude: 6,
+        label: null,
+        placeId: null,
+        source: 'drag',
+      });
+    });
   });
 });

@@ -26,6 +26,7 @@ jest.mock('@/lib/locationService', () => {
       onLocationUpdate: jest.fn(),
     },
     getCurrentLocationWithLabel: jest.fn(),
+    getLabelForCoordinates: jest.fn(async () => null),
     LocationPermissionDeniedError,
     LocationUnavailableError,
   };
@@ -221,5 +222,345 @@ describe('ReminderLocationModal createReminder error passthrough', () => {
       'Failed to create reminder. Please try again.'
     );
     expect(onCreated).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReminderLocationModal map-pin reverse-geocoding', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createReminder } = require('@/lib/appwrite');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getLabelForCoordinates } = require('@/lib/locationService');
+
+  function renderModalForMap() {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        <ReminderLocationModal
+          visible
+          description="Buy milk"
+          userId="acct-1"
+          onClose={jest.fn()}
+          onCreated={jest.fn()}
+        />
+      );
+    });
+    return renderer;
+  }
+
+  async function confirmPin(
+    renderer: TestRenderer.ReactTestRenderer,
+    coords: { latitude: number; longitude: number }
+  ) {
+    await act(async () => {
+      renderer.root.findByType(MapPicker).props.onConfirm(coords);
+      // Flush the background getLabelForCoordinates promise chain.
+      await Promise.resolve();
+    });
+  }
+
+  function visibleTexts(renderer: TestRenderer.ReactTestRenderer): string[] {
+    return renderer.root.findAllByType(Text).map((t) => {
+      const children = t.props.children;
+      return Array.isArray(children)
+        ? children.map(String).join('')
+        : String(children ?? '');
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    LocationService.getState.mockReturnValue({ location: null });
+    LocationService.onLocationUpdate.mockReturnValue(jest.fn());
+    getLabelForCoordinates.mockResolvedValue(null);
+  });
+
+  it('shows the reverse-geocoded label and saves it with the reminder on success', async () => {
+    getLabelForCoordinates.mockResolvedValue('Grand Mall');
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPin(renderer, { latitude: 10, longitude: 20 });
+
+    expect(getLabelForCoordinates).toHaveBeenCalledWith({
+      latitude: 10,
+      longitude: 20,
+    });
+    expect(visibleTexts(renderer)).toContain('Grand Mall');
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    expect(createReminder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        latitude: 10,
+        longitude: 20,
+        locationSource: 'map',
+        locationLabel: 'Grand Mall',
+      })
+    );
+  });
+
+  it('falls back to coordinates and omits locationLabel when geocoding returns null', async () => {
+    getLabelForCoordinates.mockResolvedValue(null);
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPin(renderer, { latitude: 10, longitude: 20 });
+
+    expect(visibleTexts(renderer)).toContain('10.0000, 20.0000');
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    expect(createReminder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        latitude: 10,
+        longitude: 20,
+        locationSource: 'map',
+      })
+    );
+    const input = createReminder.mock.calls[0][0];
+    expect(input.locationLabel).toBeUndefined();
+  });
+
+  it('falls back to coordinates (no crash, no unhandled rejection) when geocoding rejects', async () => {
+    getLabelForCoordinates.mockRejectedValue(new Error('sdk down'));
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPin(renderer, { latitude: 10, longitude: 20 });
+
+    // The rejection is swallowed: preview falls back, creation still works.
+    expect(visibleTexts(renderer)).toContain('10.0000, 20.0000');
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    expect(createReminder).toHaveBeenCalledWith(
+      expect.objectContaining({ latitude: 10, longitude: 20 })
+    );
+    expect(createReminder.mock.calls[0][0].locationLabel).toBeUndefined();
+  });
+
+  it('ignores a stale geocode result when the user picks another pin meanwhile', async () => {
+    let resolveFirst!: (value: string | null) => void;
+    const firstPending = new Promise<string | null>((resolve) => {
+      resolveFirst = resolve;
+    });
+    getLabelForCoordinates
+      .mockReturnValueOnce(firstPending)
+      .mockResolvedValueOnce('Second Place');
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    // First pin: geocode stays pending.
+    act(() => {
+      renderer.root
+        .findByType(MapPicker)
+        .props.onConfirm({ latitude: 10, longitude: 20 });
+    });
+    // Pick a second pin before the first geocode resolves.
+    act(() => {
+      renderer.root.findByProps({ title: 'Select on map' }).props.handlePress();
+    });
+    await act(async () => {
+      renderer.root
+        .findByType(MapPicker)
+        .props.onConfirm({ latitude: 30, longitude: 40 });
+      await Promise.resolve();
+    });
+    expect(visibleTexts(renderer)).toContain('Second Place');
+
+    // The stale first result must not overwrite the second pin.
+    await act(async () => {
+      resolveFirst('First Place');
+      await firstPending;
+      await Promise.resolve();
+    });
+    expect(visibleTexts(renderer)).toContain('Second Place');
+    expect(visibleTexts(renderer)).not.toContain('First Place');
+  });
+});
+
+describe('ReminderLocationModal POI-tap selection', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createReminder } = require('@/lib/appwrite');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getLabelForCoordinates } = require('@/lib/locationService');
+
+  function renderModalForMap() {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        <ReminderLocationModal
+          visible
+          description="Buy milk"
+          userId="acct-1"
+          onClose={jest.fn()}
+          onCreated={jest.fn()}
+        />
+      );
+    });
+    return renderer;
+  }
+
+  async function confirmPick(
+    renderer: TestRenderer.ReactTestRenderer,
+    pick: { latitude: number; longitude: number; label?: string | null; placeId?: string | null; source?: 'poi' | 'tap' | 'drag' }
+  ) {
+    await act(async () => {
+      renderer.root.findByType(MapPicker).props.onConfirm(pick);
+      await Promise.resolve();
+    });
+  }
+
+  function visibleTexts(renderer: TestRenderer.ReactTestRenderer): string[] {
+    return renderer.root.findAllByType(Text).map((t) => {
+      const children = t.props.children;
+      return Array.isArray(children)
+        ? children.map(String).join('')
+        : String(children ?? '');
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    LocationService.getState.mockReturnValue({ location: null });
+    LocationService.onLocationUpdate.mockReturnValue(jest.fn());
+    getLabelForCoordinates.mockResolvedValue(null);
+  });
+
+  it('saves the POI name directly and skips reverse-geocoding', async () => {
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPick(renderer, {
+      latitude: 1,
+      longitude: 2,
+      label: 'Test Mall',
+      placeId: 'p1',
+      source: 'poi',
+    });
+
+    expect(getLabelForCoordinates).not.toHaveBeenCalled();
+    expect(visibleTexts(renderer)).toContain('Test Mall');
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    expect(createReminder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        latitude: 1,
+        longitude: 2,
+        locationSource: 'map',
+        locationLabel: 'Test Mall',
+      })
+    );
+    // placeId is transient: never part of the create payload.
+    expect(createReminder.mock.calls[0][0]).not.toHaveProperty('placeId');
+  });
+
+  it('clamps an over-long POI name to 255 characters', async () => {
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPick(renderer, {
+      latitude: 1,
+      longitude: 2,
+      label: 'M'.repeat(300),
+      placeId: 'p1',
+      source: 'poi',
+    });
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    const input = createReminder.mock.calls[0][0];
+    expect(input.locationLabel).toHaveLength(255);
+  });
+
+  it('falls back to reverse-geocoding when the POI name is empty', async () => {
+    getLabelForCoordinates.mockResolvedValue('Geocoded Place');
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPick(renderer, {
+      latitude: 1,
+      longitude: 2,
+      label: '',
+      placeId: 'p1',
+      source: 'poi',
+    });
+
+    expect(getLabelForCoordinates).toHaveBeenCalledWith({
+      latitude: 1,
+      longitude: 2,
+    });
+    expect(visibleTexts(renderer)).toContain('Geocoded Place');
+  });
+
+  it('re-geocodes after a drag following a POI pick (no stale label stored)', async () => {
+    getLabelForCoordinates.mockResolvedValue(null);
+    createReminder.mockResolvedValue({ $id: 'r1' });
+    const renderer = renderModalForMap();
+    openMap(renderer);
+
+    await confirmPick(renderer, {
+      latitude: 1,
+      longitude: 2,
+      label: 'Test Mall',
+      placeId: 'p1',
+      source: 'poi',
+    });
+    expect(visibleTexts(renderer)).toContain('Test Mall');
+
+    // A later drag clears the POI identity; the geocode path runs again.
+    act(() => {
+      renderer.root.findByProps({ title: 'Select on map' }).props.handlePress();
+    });
+    await confirmPick(renderer, {
+      latitude: 3,
+      longitude: 4,
+      label: null,
+      placeId: null,
+      source: 'drag',
+    });
+
+    expect(getLabelForCoordinates).toHaveBeenCalledWith({
+      latitude: 3,
+      longitude: 4,
+    });
+    expect(visibleTexts(renderer)).toContain('3.0000, 4.0000');
+
+    await act(async () => {
+      await renderer.root
+        .findByProps({ title: 'Add reminder' })
+        .props.handlePress();
+    });
+
+    const input = createReminder.mock.calls[0][0];
+    expect(input.latitude).toBe(3);
+    expect(input.locationLabel).toBeUndefined();
   });
 });

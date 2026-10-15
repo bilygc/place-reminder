@@ -132,19 +132,19 @@ const HomeHeader = ({
     {/* Logo & Form */}
     <View className="flex w-full bg-background pt-16 pb-6">
       {/* Logo */}
-      <View className="flex-1 justify-center items-center text-center">
+      <View className="w-full items-center justify-center">
         <Animated.View
-          className="flex flex-row gap-1 flex-wrap max-w-[250px] text-center"
+          className="flex flex-col items-center gap-1 text-center"
           style={containerStyle}
         >
           <Animated.View style={iconStyle}>
-            <AppLogo width={80} height={97} />
+            {/* Square source asset (81x81) — keep the layout box square so the
+                SVG isn't letterboxed into a distorted slot. */}
+            <AppLogo width={80} height={80} />
           </Animated.View>
-          <View>
-            <Text className="font-inbold text-light mt-4 text-[32px]">
-              PLACE REMINDER
-            </Text>
-          </View>
+          <Text className="font-inbold text-light mt-4 text-[32px] text-center">
+            PLACE REMINDER
+          </Text>
         </Animated.View>
       </View>
       {/* Form */}
@@ -175,13 +175,17 @@ const HomeHeader = ({
             <TouchableOpacity
               activeOpacity={0.7}
               className={
-                'bg-secondary rounded-full justify-center items-center px-8 py-6 opacity-50'
+                'bg-secondary rounded-full justify-center items-center w-full h-full opacity-50'
               }
               disabled={true}
               accessibilityLabel="Microphone, unavailable"
               accessibilityState={{ disabled: true }}
             >
-              <Image source={icons.mic} resizeMode="contain" />
+              <Image
+                source={icons.mic}
+                resizeMode="contain"
+                className="w-4 h-6"
+              />
             </TouchableOpacity>
           </View>
         </View>

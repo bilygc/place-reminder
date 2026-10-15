@@ -2,6 +2,8 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
+import { LOCATION_LABEL_MAX_LENGTH } from '@/utils/validateReminder';
+
 // Define task names
 const LOCATION_BACKGROUND_TASK = 'LOCATION_BACKGROUND_TASK';
 const GEOFENCING_TASK = 'GEOFENCING_TASK';
@@ -490,12 +492,16 @@ export class LocationUnavailableError extends Error {
 
 /**
  * Build a concise human-readable label from a reverse-geocoded address.
- * Prefers "Street, City" but falls back to whatever combination is available.
+ * Prefers the point-of-interest `name` (mall, restaurant, park, ...) when
+ * present, then falls back to "Street, City" from whatever combination is
+ * available.
  */
-function buildLocationLabel(
+export function buildLocationLabel(
   address: Location.LocationGeocodedAddress
 ): string {
   const parts: string[] = [];
+  const name = typeof address.name === 'string' ? address.name.trim() : '';
+  if (name) parts.push(name);
   if (address.street) parts.push(address.street);
   if (address.city) parts.push(address.city);
   if (address.region) parts.push(address.region);
@@ -505,6 +511,48 @@ function buildLocationLabel(
     (value, index, self) => self.indexOf(value) === index
   );
   return unique.slice(0, 2).join(', ');
+}
+
+/**
+ * Reverse-geocode arbitrary coordinates into a human-readable label.
+ *
+ * Boundary call (expo-location SDK): never throws and never propagates a raw
+ * SDK error. Returns the label (clamped to LOCATION_LABEL_MAX_LENGTH), or
+ * null when the coordinates are invalid, the SDK returns nothing usable, or
+ * the SDK call fails. Callers fall back to raw coordinates on null.
+ */
+export async function getLabelForCoordinates(coords: {
+  latitude: number;
+  longitude: number;
+}): Promise<string | null> {
+  const { latitude, longitude } = coords;
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+  try {
+    const geocode = await Location.reverseGeocodeAsync({
+      latitude,
+      longitude,
+    });
+    const first = geocode?.[0];
+    if (!first) {
+      return null;
+    }
+    const label = buildLocationLabel(first);
+    if (!label || label.trim() === '') {
+      return null;
+    }
+    return label.length > LOCATION_LABEL_MAX_LENGTH
+      ? label.slice(0, LOCATION_LABEL_MAX_LENGTH)
+      : label;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -548,17 +596,8 @@ export async function getCurrentLocationWithLabel(): Promise<{
 
   const { latitude, longitude } = position.coords;
 
-  try {
-    const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-    const first = geocode?.[0];
-    if (!first) {
-      return { latitude, longitude, label: null };
-    }
-    const label = buildLocationLabel(first);
-    return { latitude, longitude, label };
-  } catch {
-    return { latitude, longitude, label: null };
-  }
+  const label = await getLabelForCoordinates({ latitude, longitude });
+  return { latitude, longitude, label };
 }
 
 export default LocationService;
