@@ -119,7 +119,7 @@ const SignIn = observer(() => {
             style={containerStyle}
           >
             <Animated.View style={iconStyle}>
-              <AppLogo width={60} height={72} />
+              <AppLogo width={60} height={60} />
             </Animated.View>
             <View>
               <Text className="font-inbold text-light text-[28px]">

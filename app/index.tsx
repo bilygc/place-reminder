@@ -55,7 +55,7 @@ const SplashScreen = observer(() => {
         style={containerStyle}
       >
         <Animated.View style={iconStyle}>
-          <AppLogo width={80} height={97} />
+          <AppLogo width={80} height={80} />
         </Animated.View>
         <View>
           <Text className="font-inbold text-light mt-4 text-[32px]">
