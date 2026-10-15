@@ -19,7 +19,7 @@
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { Text, Image, Pressable } from 'react-native';
+import { Text, Image, Pressable, View } from 'react-native';
 import CardReminder from '../CardReminder';
 import type { Card, CardProps } from '../CardReminder.types';
 import icons from '@/constants/icons';
@@ -225,6 +225,97 @@ describe('CardReminder', () => {
       expect(findPressableByTestId(r, 'card-body-r2')).toBeTruthy();
       expect(findPressableByTestId(r, 'card-bell-r2')).toBeTruthy();
       expect(findPressableByTestId(r, 'card-trash-r2')).toBeTruthy();
+    });
+  });
+
+  describe('long-text truncation (layout regression)', () => {
+    const longAt =
+      'A very long point-of-interest name that would otherwise push the icons out of the card';
+    const longDo =
+      'Another very long description string that must ellipsize instead of clipping the icons';
+    const longCard: Card = { $id: 'r9', at: longAt, do: longDo, active: true };
+
+    /** The outer Text nodes that carry single-line truncation. */
+    function truncatedTexts(r: TestRenderer.ReactTestRenderer) {
+      return r.root
+        .findAllByType(Text)
+        .filter((t) => t.props.numberOfLines === 1);
+    }
+
+    /** Walk up from a nested instance to the nearest View ancestor. */
+    function nearestViewAncestor(
+      instance: TestRenderer.ReactTestInstance
+    ): TestRenderer.ReactTestInstance {
+      let node: TestRenderer.ReactTestInstance | null = instance.parent;
+      while (node && node.type !== View) node = node.parent;
+      if (!node) throw new Error('No View ancestor found');
+      return node;
+    }
+
+    it('truncates the "At" row to one line with a tail ellipsis', () => {
+      const r = render({ card: longCard });
+      const atOuter = truncatedTexts(r).find((t) =>
+        extractStrings(t.props.children).includes('At')
+      );
+      expect(atOuter).toBeTruthy();
+      expect(atOuter!.props.ellipsizeMode).toBe('tail');
+      // Truncation is display-level: the full string stays in the tree.
+      expect(extractStrings(atOuter!.props.children)).toContain(longAt);
+    });
+
+    it('truncates the "Do" row to one line with a tail ellipsis', () => {
+      const r = render({ card: longCard });
+      const doOuter = truncatedTexts(r).find((t) =>
+        extractStrings(t.props.children).includes('Do')
+      );
+      expect(doOuter).toBeTruthy();
+      expect(doOuter!.props.ellipsizeMode).toBe('tail');
+      expect(extractStrings(doOuter!.props.children)).toContain(longDo);
+    });
+
+    it('keeps the full strings in the body accessibilityLabel for screen readers', () => {
+      const r = render({ card: longCard });
+      const body = findPressableByTestId(r, 'card-body-r9');
+      expect(body.props.accessibilityLabel).toContain(longAt);
+      expect(body.props.accessibilityLabel).toContain(longDo);
+    });
+
+    it('bounds the body so it can shrink instead of growing (flex-1 min-w-0)', () => {
+      const r = render({ card: longCard });
+      const bodyClass: string = findPressableByTestId(
+        r,
+        'card-body-r9'
+      ).props.className;
+      expect(bodyClass).toMatch(/(^|\s)flex-1(\s|$)/);
+      expect(bodyClass).toMatch(/(^|\s)min-w-0(\s|$)/);
+    });
+
+    it('keeps the right icon column rigid (shrink-0) so it never absorbs the squeeze', () => {
+      const r = render({ card: longCard });
+      const bell = findPressableByTestId(r, 'card-bell-r9');
+      const columnClass: string =
+        nearestViewAncestor(bell).props.className;
+      expect(columnClass).toMatch(/shrink-0/);
+    });
+
+    it('keeps all three tap targets mounted with long text', () => {
+      const r = render({ card: longCard });
+      expect(findAllPressables(r)).toHaveLength(3);
+      expect(findPressableByTestId(r, 'card-body-r9')).toBeTruthy();
+      expect(findPressableByTestId(r, 'card-bell-r9')).toBeTruthy();
+      expect(findPressableByTestId(r, 'card-trash-r9')).toBeTruthy();
+    });
+
+    it('keeps the fixed 333px card width and the untouched left bell container', () => {
+      const r = render({ card: longCard });
+      const views = r.root.findAllByType(View);
+      expect(views[0].props.className).toMatch(/w-\[333px\]/);
+      const leftBell = views.find(
+        (v) =>
+          typeof v.props.className === 'string' &&
+          v.props.className.includes('w-[41px]')
+      );
+      expect(leftBell).toBeTruthy();
     });
   });
 });
