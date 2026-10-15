@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Platform, StyleSheet } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import CustomButton from '@/components/CustomButton';
@@ -10,8 +10,25 @@ interface MapPickerRegion {
   longitudeDelta?: number;
 }
 
+/** How the pin location was chosen. */
+export type MapPickSource = 'poi' | 'tap' | 'drag';
+
+export interface MapPickLocation {
+  latitude: number;
+  longitude: number;
+  /** POI place name when picked via onPoiClick; null for raw tap/drag. */
+  label?: string | null;
+  /**
+   * Google place id from onPoiClick. Transient only — never persisted
+   * (no Appwrite attribute); reserved for a future Google Places Details
+   * lookup.
+   */
+  placeId?: string | null;
+  source?: MapPickSource;
+}
+
 interface MapPickerProps {
-  onConfirm: (location: { latitude: number; longitude: number }) => void;
+  onConfirm: (location: MapPickLocation) => void;
   onCancel: () => void;
   initialRegion?: MapPickerRegion;
 }
@@ -23,15 +40,67 @@ const DEFAULT_REGION: Required<MapPickerRegion> = {
   longitudeDelta: 0.0421,
 };
 
+/**
+ * Window after an onPoiClick during which a trailing onPress is treated as
+ * the same gesture. On Android (Google backend) a POI tap commonly fires
+ * onPoiClick followed by onPress for the same touch; without the guard the
+ * second event would overwrite the POI pick with a raw tap.
+ */
+const POI_DOUBLE_FIRE_GUARD_MS = 400;
+
 const MapPicker = ({ onConfirm, onCancel, initialRegion = DEFAULT_REGION }: MapPickerProps) => {
   const isWeb = Platform.OS === 'web';
-  const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [pin, setPin] = useState<MapPickLocation | null>(null);
+  const lastPoiAtRef = useRef(0);
 
   const region: Required<MapPickerRegion> = {
     latitude: initialRegion.latitude,
     longitude: initialRegion.longitude,
     latitudeDelta: initialRegion.latitudeDelta ?? DEFAULT_REGION.latitudeDelta,
     longitudeDelta: initialRegion.longitudeDelta ?? DEFAULT_REGION.longitudeDelta,
+  };
+
+  const handlePress = (e: {
+    nativeEvent: { coordinate: { latitude: number; longitude: number } };
+  }) => {
+    // Ignore the onPress that trails an onPoiClick for the same tap
+    // (Android double-fire). A genuine later tap falls outside the window and
+    // clears any POI label/placeId (latest intent wins; stale place names must
+    // not survive — re-geocode happens downstream).
+    if (Date.now() - lastPoiAtRef.current < POI_DOUBLE_FIRE_GUARD_MS) {
+      return;
+    }
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setPin({ latitude, longitude, label: null, placeId: null, source: 'tap' });
+  };
+
+  const handlePoiClick = (e: {
+    nativeEvent: {
+      coordinate: { latitude: number; longitude: number };
+      placeId: string;
+      name: string;
+    };
+  }) => {
+    // Fires on the Google backend (Android, and iOS only when Google Maps is
+    // the provider). On Apple Maps this never fires and the tap path above is
+    // the only selector — this handler stays inert there.
+    lastPoiAtRef.current = Date.now();
+    const { coordinate, placeId, name } = e.nativeEvent;
+    setPin({
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+      label: name ?? null,
+      placeId: placeId ?? null,
+      source: 'poi',
+    });
+  };
+
+  const handleDragEnd = (e: {
+    nativeEvent: { coordinate: { latitude: number; longitude: number } };
+  }) => {
+    // Dragging away from a POI pin drops the place identity with it.
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setPin({ latitude, longitude, label: null, placeId: null, source: 'drag' });
   };
 
   return (
@@ -54,13 +123,14 @@ const MapPicker = ({ onConfirm, onCancel, initialRegion = DEFAULT_REGION }: MapP
             initialRegion={region}
             showsUserLocation
             showsMyLocationButton
-            onPress={(e) => setPin(e.nativeEvent.coordinate)}
+            onPress={handlePress}
+            onPoiClick={handlePoiClick}
           >
             {pin && (
               <Marker
-                coordinate={pin}
+                coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
                 draggable
-                onDragEnd={(e) => setPin(e.nativeEvent.coordinate)}
+                onDragEnd={handleDragEnd}
               />
             )}
           </MapView>
@@ -90,6 +160,8 @@ const MapPicker = ({ onConfirm, onCancel, initialRegion = DEFAULT_REGION }: MapP
   );
 };
 
+export default MapPicker;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -105,5 +177,3 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
 });
-
-export default MapPicker;

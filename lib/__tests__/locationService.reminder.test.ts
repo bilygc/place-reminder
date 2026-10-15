@@ -21,7 +21,32 @@ const {
   LOCATION_NO_FIX_MESSAGE,
   LOCATION_SERVICES_DISABLED_MESSAGE,
   getCurrentLocationWithLabel,
+  getLabelForCoordinates,
+  buildLocationLabel,
 } = require('../locationService');
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { LOCATION_LABEL_MAX_LENGTH } = require('@/utils/validateReminder');
+
+function makeAddress(
+  overrides: Partial<LocationGeocodedAddress> = {}
+): LocationGeocodedAddress {
+  return {
+    street: null,
+    city: null,
+    region: null,
+    country: null,
+    name: null,
+    postalCode: null,
+    subregion: null,
+    isoCountryCode: null,
+    timezone: null,
+    district: null,
+    streetNumber: null,
+    formattedAddress: null,
+    ...overrides,
+  };
+}
 
 describe('LocationPermissionDeniedError', () => {
   it('is an Error subclass', () => {
@@ -296,4 +321,179 @@ describe('getCurrentLocationWithLabel', () => {
       jest.useRealTimers();
     }
   });
+
+  it('prefers the POI name from the current-location geocode result', async () => {
+    locationMock.requestForegroundPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      granted: true,
+      expires: 'never',
+    });
+    locationMock.getCurrentPositionAsync.mockResolvedValue({
+      coords: { latitude: 40.7128, longitude: -74.006 },
+      timestamp: 1700000000000,
+    });
+    locationMock.reverseGeocodeAsync.mockResolvedValue([
+      makeAddress({
+        name: 'Grand Mall',
+        street: '123 Main St',
+        city: 'New York',
+        region: 'NY',
+        country: 'USA',
+      }),
+    ]);
+
+    const result = await getCurrentLocationWithLabel();
+
+    expect(result).toEqual({
+      latitude: 40.7128,
+      longitude: -74.006,
+      label: 'Grand Mall, 123 Main St',
+    });
+  });
+});
+
+describe('buildLocationLabel', () => {
+  it('prefers the POI name first, then street', () => {
+    expect(
+      buildLocationLabel(
+        makeAddress({
+          name: 'Grand Mall',
+          street: '123 Main St',
+          city: 'Springfield',
+          region: 'IL',
+          country: 'USA',
+        })
+      )
+    ).toBe('Grand Mall, 123 Main St');
+  });
+
+  it('falls back to name + city when no street is available', () => {
+    expect(
+      buildLocationLabel(
+        makeAddress({ name: 'Starbucks', city: 'Seattle' })
+      )
+    ).toBe('Starbucks, Seattle');
+  });
+
+  it('keeps the existing Street, City output when no name is present', () => {
+    expect(
+      buildLocationLabel(
+        makeAddress({
+          name: null,
+          street: '123 Main St',
+          city: 'New York',
+          region: 'NY',
+          country: 'USA',
+        })
+      )
+    ).toBe('123 Main St, New York');
+  });
+
+  it('ignores a blank name and falls back to Street, City', () => {
+    expect(
+      buildLocationLabel(
+        makeAddress({ name: '   ', street: '123 Main St', city: 'New York' })
+      )
+    ).toBe('123 Main St, New York');
+  });
+
+  it('dedupes a name that repeats the street', () => {
+    expect(
+      buildLocationLabel(
+        makeAddress({
+          name: '123 Main St',
+          street: '123 Main St',
+          city: 'New York',
+        })
+      )
+    ).toBe('123 Main St, New York');
+  });
+
+  it('returns an empty string when no address components exist', () => {
+    expect(buildLocationLabel(makeAddress())).toBe('');
+  });
+});
+
+describe('getLabelForCoordinates', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    locationMock.hasServicesEnabledAsync.mockResolvedValue(true);
+    locationMock.getLastKnownPositionAsync.mockResolvedValue(null);
+  });
+
+  it('returns the POI-preferred label for arbitrary coordinates', async () => {
+    locationMock.reverseGeocodeAsync.mockResolvedValue([
+      makeAddress({
+        name: 'Grand Mall',
+        street: '123 Main St',
+        city: 'Springfield',
+      }),
+    ]);
+
+    await expect(
+      getLabelForCoordinates({ latitude: 10, longitude: 20 })
+    ).resolves.toBe('Grand Mall, 123 Main St');
+    expect(locationMock.reverseGeocodeAsync).toHaveBeenCalledWith({
+      latitude: 10,
+      longitude: 20,
+    });
+  });
+
+  it('returns the Street, City fallback when the geocode has no name', async () => {
+    locationMock.reverseGeocodeAsync.mockResolvedValue([
+      makeAddress({ street: '123 Main St', city: 'New York' }),
+    ]);
+
+    await expect(
+      getLabelForCoordinates({ latitude: 10, longitude: 20 })
+    ).resolves.toBe('123 Main St, New York');
+  });
+
+  it('returns null (does not throw) when the SDK returns an empty array', async () => {
+    locationMock.reverseGeocodeAsync.mockResolvedValue([]);
+
+    await expect(
+      getLabelForCoordinates({ latitude: 10, longitude: 20 })
+    ).resolves.toBeNull();
+  });
+
+  it('returns null (does not throw) when the SDK rejects', async () => {
+    locationMock.reverseGeocodeAsync.mockRejectedValue(
+      new Error('geocoding unavailable')
+    );
+
+    await expect(
+      getLabelForCoordinates({ latitude: 10, longitude: 20 })
+    ).resolves.toBeNull();
+  });
+
+  it('returns null when the geocode result has no usable components', async () => {
+    locationMock.reverseGeocodeAsync.mockResolvedValue([makeAddress()]);
+
+    await expect(
+      getLabelForCoordinates({ latitude: 10, longitude: 20 })
+    ).resolves.toBeNull();
+  });
+
+  it('clamps a long label to LOCATION_LABEL_MAX_LENGTH', async () => {
+    locationMock.reverseGeocodeAsync.mockResolvedValue([
+      makeAddress({ name: 'a'.repeat(300), city: 'Seattle' }),
+    ]);
+
+    const label = await getLabelForCoordinates({ latitude: 10, longitude: 20 });
+
+    expect(label).not.toBeNull();
+    expect(label!.length).toBe(LOCATION_LABEL_MAX_LENGTH);
+  });
+
+  it.each([
+    { latitude: NaN, longitude: 20 },
+    { latitude: 10, longitude: Infinity },
+  ])(
+    'returns null without calling the SDK for invalid coords %p',
+    async (coords) => {
+      await expect(getLabelForCoordinates(coords)).resolves.toBeNull();
+      expect(locationMock.reverseGeocodeAsync).not.toHaveBeenCalled();
+    }
+  );
 });

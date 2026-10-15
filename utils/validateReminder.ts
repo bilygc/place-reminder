@@ -13,6 +13,17 @@ export const DESCRIPTION_MAX_LENGTH = 500;
 export const LOCATION_LABEL_MAX_LENGTH = 255;
 
 /**
+ * Clamp a place/POI name to the persisted label limit. Same bound applied to
+ * reverse-geocoded labels in `getLabelForCoordinates` — single place where
+ * the truncation rule lives for caller-supplied names.
+ */
+export function clampLocationLabel(label: string): string {
+  return label.length > LOCATION_LABEL_MAX_LENGTH
+    ? label.slice(0, LOCATION_LABEL_MAX_LENGTH)
+    : label;
+}
+
+/**
  * Check whether a description is non-empty after trimming and within the
  * allowed length.
  */

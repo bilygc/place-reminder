@@ -3,12 +3,13 @@ import { Modal, View, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomButton from '@/components/CustomButton';
 import { FormField } from '@/components/FormField';
-import MapPicker from '@/components/MapPicker';
+import MapPicker, { type MapPickLocation, type MapPickSource } from '@/components/MapPicker';
 import { updateReminder } from '@/lib/reminders';
 import type { LocationSource, Reminder } from '@/lib/appwrite.types';
-import { isDescriptionValid } from '@/utils/validateReminder';
+import { isDescriptionValid, clampLocationLabel } from '@/utils/validateReminder';
 import LocationService, {
   getCurrentLocationWithLabel,
+  getLabelForCoordinates,
   LocationPermissionDeniedError,
   LocationUnavailableError,
 } from '@/lib/locationService';
@@ -81,6 +82,13 @@ const EditReminderModal = ({
     latitude: number;
     longitude: number;
     label: string | null;
+    /**
+     * Google place id from a POI tap. Transient only — never sent to
+     * updateReminder (no Appwrite attribute); reserved for a future Google
+     * Places Details lookup.
+     */
+    placeId?: string | null;
+    source?: MapPickSource | 'current';
   } | null>(() =>
     hasCoords
       ? {
@@ -136,7 +144,7 @@ const EditReminderModal = ({
     setError(null);
     try {
       const location = await getCurrentLocationWithLabel();
-      setPendingLocation(location);
+      setPendingLocation({ ...location, source: 'current' });
       setLocationSource('current');
     } catch (err) {
       if (
@@ -157,13 +165,58 @@ const EditReminderModal = ({
     }
   };
 
-  const handleMapConfirm = (location: {
-    latitude: number;
-    longitude: number;
-  }) => {
-    setPendingLocation({ ...location, label: null });
+  const handleMapConfirm = (location: MapPickLocation) => {
+    const source = location.source ?? 'tap';
+    const poiName =
+      typeof location.label === 'string' ? location.label : '';
+    if (source === 'poi' && poiName.trim() !== '') {
+      // POI tap: the place name is already the precise identity, so the
+      // reverse-geocode is skipped entirely. placeId stays transient (never
+      // persisted); only the clamped label flows into locationLabel on save.
+      setPendingLocation({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: clampLocationLabel(poiName),
+        placeId: location.placeId ?? null,
+        source: 'poi',
+      });
+      setLocationSource('map');
+      setSelectingOnMap(false);
+      return;
+    }
+    // Raw tap / drag (or a POI with an empty/missing name): any previous POI
+    // identity is cleared and the existing background reverse-geocode path
+    // runs unchanged.
+    setPendingLocation({
+      latitude: location.latitude,
+      longitude: location.longitude,
+      label: null,
+      placeId: null,
+      source,
+    });
     setLocationSource('map');
     setSelectingOnMap(false);
+    // Same background reverse-geocode as the create flow. A resolved label is
+    // saved via `locationLabel`; a failure leaves label null so handleSave
+    // sends '' and correctly clears any stale label (see handleSave comment).
+    void getLabelForCoordinates({
+      latitude: location.latitude,
+      longitude: location.longitude,
+    })
+      .then((label) => {
+        if (!label) return;
+        setPendingLocation((prev) =>
+          prev !== null &&
+          prev.latitude === location.latitude &&
+          prev.longitude === location.longitude
+            ? { ...prev, label }
+            : prev
+        );
+      })
+      .catch(() => {
+        // getLabelForCoordinates never rejects; belt-and-braces so a geocode
+        // failure can never surface as an unhandled rejection.
+      });
   };
 
   const handleSave = async () => {
